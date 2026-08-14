@@ -24,7 +24,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-
+  bool _isRefreshing = false;
   bool _hasSubmittedFeedback = false;
 
   final List<Map<String, String>> _details = const [
@@ -63,6 +63,25 @@ class _ProfileScreenState extends State<ProfileScreen>
   void dispose() {
     _fadeController.dispose();
     super.dispose();
+  }
+
+  // Helper method to open drawer using the parent state
+  void _openDrawer() {
+    final state = context.findAncestorStateOfType<TenantScreenState>();
+    if (state != null) {
+      state.openDrawer();
+    } else {
+      Scaffold.of(context).openDrawer();
+    }
+  }
+
+  Future<void> _handleRefresh() async {
+    setState(() => _isRefreshing = true);
+    await Future.delayed(const Duration(seconds: 1));
+    if (mounted) {
+      setState(() => _isRefreshing = false);
+      SnackbarHelper.showSuccess(context, 'Profile refreshed');
+    }
   }
 
   Future<bool> _onWillPop() async {
@@ -149,9 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget build(BuildContext context) {
     super.build(context);
 
-    // Get the height of the bottom navigation bar (floating tabs)
-    // This ensures our content clears the navigation bar
-    final double bottomNavHeight = 76.0; // Approximate height of the floating nav bar
+    final double bottomNavHeight = 76.0;
     final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return WillPopScope(
@@ -171,14 +188,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
               child: const Icon(Icons.menu_rounded, color: Colors.white, size: 22),
             ),
-            onPressed: () {
-              final provider = TenantScreenProvider.of(context);
-              if (provider != null) {
-                provider.openDrawer();
-              } else {
-                Scaffold.of(context).openDrawer();
-              }
-            },
+            onPressed: _openDrawer,
           ),
           title: const Text(
             'Profile',
@@ -189,147 +199,153 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
         ),
-        body: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                kLivinkeyGreen.withOpacity(0.05),
-                kLivinkeyBlack,
-                kLivinkeyBlack,
-              ],
-              stops: const [0.0, 0.3, 1.0],
+        body: RefreshIndicator(
+          onRefresh: _handleRefresh,
+          color: kLivinkeyGreen,
+          backgroundColor: kLivinkeyBlack,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  kLivinkeyGreen.withOpacity(0.05),
+                  kLivinkeyBlack,
+                  kLivinkeyBlack,
+                ],
+                stops: const [0.0, 0.3, 1.0],
+              ),
             ),
-          ),
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                // Add extra bottom padding to clear the floating navigation bar
-                // The padding includes: 
-                // - 32 (base bottom padding for the scroll view)
-                // - bottomNavHeight (to clear the floating nav bar)
-                // - bottomSafeArea (to account for device safe areas)
-                // - Extra 16 for comfortable spacing
-                padding: EdgeInsets.fromLTRB(
-                  20, 
-                  8, 
-                  20, 
-                  32 + bottomNavHeight + bottomSafeArea + 16,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    8,
+                    20,
+                    32 + bottomNavHeight + bottomSafeArea + 16,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
 
-                    _buildProfileHeader(),
-                    const SizedBox(height: 26),
+                      _buildProfileHeader(),
+                      const SizedBox(height: 26),
 
-                    _buildSectionHeader('Details'),
-                    const SizedBox(height: 14),
+                      _buildSectionHeader('Details'),
+                      const SizedBox(height: 14),
 
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Colors.white.withOpacity(0.035),
-                            Colors.white.withOpacity(0.015),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.07),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        children: _details
-                            .map((d) => ProfileRow(
-                                  label: d['label']!,
-                                  value: d['value']!,
-                                ))
-                            .toList(),
-                      ),
-                    ),
-
-                    const SizedBox(height: 22),
-
-                    Center(
-                      child: TextButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const GuestScreen()),
-                          );
-                        },
-                        icon: Icon(
-                          Icons.switch_account_rounded,
-                          color: kLivinkeyGreen,
-                          size: 20,
-                        ),
-                        label: Text(
-                          'Enter as Guest',
-                          style: TextStyle(
-                            color: kLivinkeyGreen,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white.withOpacity(0.035),
+                              Colors.white.withOpacity(0.015),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.07),
+                            width: 1,
                           ),
                         ),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                          backgroundColor: kLivinkeyGreen.withOpacity(0.08),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(
-                              color: kLivinkeyGreen.withOpacity(0.15),
-                              width: 1,
+                        child: Column(
+                          children: _details
+                              .map((d) => ProfileRow(
+                                    label: d['label']!,
+                                    value: d['value']!,
+                                  ))
+                              .toList(),
+                        ),
+                      ),
+
+                      const SizedBox(height: 22),
+
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: () {
+                            hapticFeedback();
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const GuestScreen()),
+                            );
+                            SnackbarHelper.showInfo(
+                              context,
+                              'Switching to Guest mode',
+                            );
+                          },
+                          icon: Icon(
+                            Icons.switch_account_rounded,
+                            color: kLivinkeyGreen,
+                            size: 20,
+                          ),
+                          label: Text(
+                            'Enter as Guest',
+                            style: TextStyle(
+                              color: kLivinkeyGreen,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                            backgroundColor: kLivinkeyGreen.withOpacity(0.08),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(
+                                color: kLivinkeyGreen.withOpacity(0.15),
+                                width: 1,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 22),
+                      const SizedBox(height: 22),
 
-                    _buildLinkItem('Terms of Service', Icons.description_rounded),
-                    _buildLinkItem('Privacy Policy', Icons.privacy_tip_rounded),
+                      _buildLinkItem('Terms of Service', Icons.description_rounded),
+                      _buildLinkItem('Privacy Policy', Icons.privacy_tip_rounded),
 
-                    const SizedBox(height: 22),
+                      const SizedBox(height: 22),
 
-                    _buildFeedbackButton(),
+                      _buildFeedbackButton(),
 
-                    const SizedBox(height: 12),
+                      const SizedBox(height: 12),
 
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _handleLogout,
-                        icon: const Icon(Icons.logout_rounded, color: Colors.red, size: 20),
-                        label: const Text(
-                          'Logout',
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _handleLogout,
+                          icon: const Icon(Icons.logout_rounded, color: Colors.red, size: 20),
+                          label: const Text(
+                            'Logout',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                            ),
                           ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.red.withOpacity(0.6), width: 1),
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.red.withOpacity(0.6), width: 1),
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                           ),
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 16),
-                  ],
+                      const SizedBox(height: 16),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -524,7 +540,8 @@ class _ProfileScreenState extends State<ProfileScreen>
           size: 20,
         ),
         onTap: () {
-          SnackbarHelper.show(context, title);
+          hapticFeedback();
+          SnackbarHelper.showInfo(context, title);
         },
       ),
     );
@@ -743,6 +760,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             width: double.infinity,
                             child: ElevatedButton(
                               onPressed: () {
+                                hapticFeedback();
                                 _submitFeedback(
                                   context,
                                   ratings,
@@ -767,7 +785,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ),
                             ),
                           ),
-                          const SizedBox(height: 20), // Extra bottom padding for the sheet
+                          const SizedBox(height: 20),
                         ],
                       ),
                     ),
@@ -1019,6 +1037,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
               );
+              SnackbarHelper.showSuccess(context, 'Logged out successfully');
             },
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

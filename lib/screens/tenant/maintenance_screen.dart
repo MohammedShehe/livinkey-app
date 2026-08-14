@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../utils/constants.dart';
+import '../../utils/helpers.dart';
 import '../../widgets/tenant/maintenance_item.dart';
 import '../../widgets/common/snackbar_helper.dart';
 import 'tenant_screen.dart';
@@ -24,6 +25,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   String _selectedFilter = 'All';
+  bool _isRefreshing = false;
 
   final List<Map<String, String>> _requests = [
     {'type': 'Plumbing', 'date': '12 Aug, 2026', 'time': '10:00 AM', 'desc': 'Leaking pipe in kitchen', 'status': 'Pending'},
@@ -56,6 +58,25 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
   void dispose() {
     _fadeController.dispose();
     super.dispose();
+  }
+
+  // Helper method to open drawer using the parent state
+  void _openDrawer() {
+    final state = context.findAncestorStateOfType<TenantScreenState>();
+    if (state != null) {
+      state.openDrawer();
+    } else {
+      Scaffold.of(context).openDrawer();
+    }
+  }
+
+  Future<void> _handleRefresh() async {
+    setState(() => _isRefreshing = true);
+    await Future.delayed(const Duration(seconds: 1));
+    if (mounted) {
+      setState(() => _isRefreshing = false);
+      SnackbarHelper.showSuccess(context, 'Maintenance requests refreshed');
+    }
   }
 
   Future<bool> _onWillPop() async {
@@ -147,9 +168,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
   Widget build(BuildContext context) {
     super.build(context);
 
-    // Get the height of the bottom navigation bar (floating tabs)
-    // This ensures our content clears the navigation bar
-    final double bottomNavHeight = 76.0; // Approximate height of the floating nav bar
+    final double bottomNavHeight = 76.0;
     final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return WillPopScope(
@@ -169,14 +188,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
               ),
               child: const Icon(Icons.menu_rounded, color: Colors.white, size: 22),
             ),
-            onPressed: () {
-              final provider = TenantScreenProvider.of(context);
-              if (provider != null) {
-                provider.openDrawer();
-              } else {
-                Scaffold.of(context).openDrawer();
-              }
-            },
+            onPressed: _openDrawer,
           ),
           title: const Text(
             'Maintenance',
@@ -187,118 +199,119 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
             ),
           ),
         ),
-        body: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                kLivinkeyGreen.withOpacity(0.05),
-                kLivinkeyBlack,
-                kLivinkeyBlack,
-              ],
-              stops: const [0.0, 0.3, 1.0],
+        body: RefreshIndicator(
+          onRefresh: _handleRefresh,
+          color: kLivinkeyGreen,
+          backgroundColor: kLivinkeyBlack,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  kLivinkeyGreen.withOpacity(0.05),
+                  kLivinkeyBlack,
+                  kLivinkeyBlack,
+                ],
+                stops: const [0.0, 0.3, 1.0],
+              ),
             ),
-          ),
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                // Add extra bottom padding to clear the floating navigation bar
-                // The padding includes: 
-                // - 32 (base bottom padding for the scroll view)
-                // - bottomNavHeight (to clear the floating nav bar)
-                // - bottomSafeArea (to account for device safe areas)
-                // - Extra 16 for comfortable spacing
-                padding: EdgeInsets.fromLTRB(
-                  20, 
-                  8, 
-                  20, 
-                  32 + bottomNavHeight + bottomSafeArea + 16,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    8,
+                    20,
+                    32 + bottomNavHeight + bottomSafeArea + 16,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
 
-                    Row(
-                      children: [
-                        _buildMaintenanceStat('Pending', 3, Colors.red),
-                        const SizedBox(width: 10),
-                        _buildMaintenanceStat('In Progress', 2, Colors.orange),
-                        const SizedBox(width: 10),
-                        _buildMaintenanceStat('Solved', 5, kLivinkeyGreen),
-                      ],
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    _buildSectionHeader('Requests'),
-                    const SizedBox(height: 14),
-
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
+                      Row(
                         children: [
-                          _buildFilterChip('All'),
-                          const SizedBox(width: 8),
-                          _buildFilterChip('Pending'),
-                          const SizedBox(width: 8),
-                          _buildFilterChip('In Progress'),
-                          const SizedBox(width: 8),
-                          _buildFilterChip('Solved'),
+                          _buildMaintenanceStat('Pending', 3, Colors.red),
+                          const SizedBox(width: 10),
+                          _buildMaintenanceStat('In Progress', 2, Colors.orange),
+                          const SizedBox(width: 10),
+                          _buildMaintenanceStat('Solved', 5, kLivinkeyGreen),
                         ],
                       ),
-                    ),
 
-                    const SizedBox(height: 18),
+                      const SizedBox(height: 24),
 
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _filteredRequests.length,
-                      separatorBuilder: (context, index) => Divider(
-                        color: Colors.white.withOpacity(0.05),
-                        height: 12,
-                      ),
-                      itemBuilder: (context, index) {
-                        return MaintenanceItem(request: _filteredRequests[index]);
-                      },
-                    ),
+                      _buildSectionHeader('Requests'),
+                      const SizedBox(height: 14),
 
-                    const SizedBox(height: 20),
-
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _showSubmitRequest(context),
-                        icon: const Icon(Icons.add_rounded, color: Colors.black, size: 22),
-                        label: const Text(
-                          'Submit Request',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: kLivinkeyGreen,
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          elevation: 0,
-                          shadowColor: kLivinkeyGreen.withOpacity(0.4),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ).copyWith(
-                          elevation: WidgetStateProperty.all(0),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildFilterChip('All'),
+                            const SizedBox(width: 8),
+                            _buildFilterChip('Pending'),
+                            const SizedBox(width: 8),
+                            _buildFilterChip('In Progress'),
+                            const SizedBox(width: 8),
+                            _buildFilterChip('Solved'),
+                          ],
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 16),
-                  ],
+                      const SizedBox(height: 18),
+
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _filteredRequests.length,
+                        separatorBuilder: (context, index) => Divider(
+                          color: Colors.white.withOpacity(0.05),
+                          height: 12,
+                        ),
+                        itemBuilder: (context, index) {
+                          return MaintenanceItem(request: _filteredRequests[index]);
+                        },
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _showSubmitRequest(context),
+                          icon: const Icon(Icons.add_rounded, color: Colors.black, size: 22),
+                          label: const Text(
+                            'Submit Request',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kLivinkeyGreen,
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            elevation: 0,
+                            shadowColor: kLivinkeyGreen.withOpacity(0.4),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ).copyWith(
+                            elevation: WidgetStateProperty.all(0),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -544,7 +557,6 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
                                   : () async {
                                       setState(() => _isSubmitting = true);
 
-                                      // Simulate the network call for submitting the request.
                                       await Future.delayed(const Duration(seconds: 2));
 
                                       if (!context.mounted) return;
@@ -553,6 +565,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
                                       SnackbarHelper.show(
                                         context,
                                         'Request submitted successfully!${_selectedImage != null ? ' 📸' : ''}',
+                                        icon: Icons.check_circle_rounded,
                                       );
                                     },
                               style: ElevatedButton.styleFrom(
@@ -590,7 +603,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
                               ),
                             ),
                           ),
-                          const SizedBox(height: 20), // Extra bottom padding for the sheet
+                          const SizedBox(height: 20),
                         ],
                       ),
                     ),

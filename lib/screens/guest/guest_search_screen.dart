@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../utils/constants.dart';
+import '../../utils/helpers.dart';
 import '../../widgets/guest/pg_card.dart';
 import '../../widgets/guest/pg_detail_modal.dart';
 import '../../models/pg_model.dart';
@@ -27,6 +28,7 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
   final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
   bool _isFocused = false;
+  bool _isRefreshing = false;
 
   final List<PgModel> _allPgs = [
     PgModel(
@@ -164,6 +166,24 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
     super.dispose();
   }
 
+  // Helper method to open drawer using the parent state
+  void _openDrawer() {
+    final state = context.findAncestorStateOfType<GuestScreenState>();
+    if (state != null) {
+      state.openDrawer();
+    } else {
+      Scaffold.of(context).openDrawer();
+    }
+  }
+
+  Future<void> _handleRefresh() async {
+    setState(() => _isRefreshing = true);
+    await Future.delayed(const Duration(seconds: 1));
+    if (mounted) {
+      setState(() => _isRefreshing = false);
+    }
+  }
+
   void _showPgDetail(PgModel pg) {
     HapticFeedback.lightImpact();
     showModalBottomSheet(
@@ -178,9 +198,7 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
   Widget build(BuildContext context) {
     super.build(context);
     
-    // Get the height of the bottom navigation bar (floating tabs)
-    // This ensures our content clears the navigation bar
-    final double bottomNavHeight = 76.0; // Approximate height of the floating nav bar
+    final double bottomNavHeight = 76.0;
     final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
@@ -199,14 +217,7 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
             ),
             child: const Icon(Icons.menu_rounded, color: Colors.white, size: 20),
           ),
-          onPressed: () {
-            final provider = GuestScreenProvider.of(context);
-            if (provider != null) {
-              provider.openDrawer();
-            } else {
-              Scaffold.of(context).openDrawer();
-            }
-          },
+          onPressed: _openDrawer,
         ),
         title: const Text(
           'Search PGs',
@@ -264,226 +275,233 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
           ),
         ],
       ),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOut,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: _isFocused
-                          ? [
-                              kLivinkeyGreen.withOpacity(0.10),
-                              kLivinkeyGreen.withOpacity(0.03),
-                            ]
-                          : [
-                              Colors.white.withOpacity(0.05),
-                              Colors.white.withOpacity(0.02),
-                            ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: _isFocused
-                          ? kLivinkeyGreen.withOpacity(0.45)
-                          : Colors.white.withOpacity(0.08),
-                      width: _isFocused ? 1.5 : 1,
-                    ),
-                    boxShadow: _isFocused
-                        ? [
-                            BoxShadow(
-                              color: kLivinkeyGreen.withOpacity(0.12),
-                              blurRadius: 18,
-                              offset: const Offset(0, 6),
-                            ),
-                          ]
-                        : [],
-                  ),
-                  child: TextField(
-                    controller: _searchController,
-                    focusNode: _searchFocusNode,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Search by name, location, rent, amenities...',
-                      hintStyle: TextStyle(
-                        color: Colors.white.withOpacity(0.3),
-                        fontSize: 13.5,
+      body: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        color: kLivinkeyGreen,
+        backgroundColor: kLivinkeyBlack,
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOut,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: _isFocused
+                            ? [
+                                kLivinkeyGreen.withOpacity(0.10),
+                                kLivinkeyGreen.withOpacity(0.03),
+                              ]
+                            : [
+                                Colors.white.withOpacity(0.05),
+                                Colors.white.withOpacity(0.02),
+                              ],
                       ),
-                      prefixIcon: Icon(
-                        Icons.search_rounded,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
                         color: _isFocused
-                            ? kLivinkeyGreen
-                            : kLivinkeyGreen.withOpacity(0.6),
-                        size: 22,
+                            ? kLivinkeyGreen.withOpacity(0.45)
+                            : Colors.white.withOpacity(0.08),
+                        width: _isFocused ? 1.5 : 1,
                       ),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.08),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.close_rounded,
-                                  color: Colors.white.withOpacity(0.6),
-                                  size: 14,
-                                ),
+                      boxShadow: _isFocused
+                          ? [
+                              BoxShadow(
+                                color: kLivinkeyGreen.withOpacity(0.12),
+                                blurRadius: 18,
+                                offset: const Offset(0, 6),
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  _searchController.clear();
-                                  _searchQuery = '';
-                                });
-                                HapticFeedback.selectionClick();
-                              },
-                            )
-                          : null,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 14,
-                      ),
-                      isDense: true,
+                            ]
+                          : [],
                     ),
-                    onChanged: (value) {
-                      setState(() {
-                        _searchQuery = value;
-                      });
-                    },
-                  ),
-                ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 3,
-                      height: 13,
-                      decoration: BoxDecoration(
-                        color: kLivinkeyGreen.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(4),
+                    child: TextField(
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${_searchResults.length} PG${_searchResults.length != 1 ? 's' : ''} found',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.45),
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    20, 
-                    0, 
-                    20, 
-                    bottomNavHeight + bottomSafeArea + 16,
-                  ),
-                  child: _searchResults.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(24),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.04),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.search_off_rounded,
-                                  color: Colors.white.withOpacity(0.15),
-                                  size: 56,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No PGs found',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.4),
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Try adjusting your search',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.2),
-                                  fontSize: 12.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : GridView.builder(
-                          physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.only(bottom: 20),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 14,
-                            childAspectRatio: 0.75,
-                          ),
-                          itemCount: _searchResults.length,
-                          itemBuilder: (context, index) {
-                            return TweenAnimationBuilder<double>(
-                              duration: Duration(milliseconds: 300 + (index * 50)),
-                              curve: Curves.easeOutCubic,
-                              tween: Tween(begin: 0.0, end: 1.0),
-                              builder: (context, value, child) {
-                                return Opacity(
-                                  opacity: value,
-                                  child: Transform.translate(
-                                    offset: Offset(0, 14 * (1 - value)),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: PgCard(
-                                pg: _searchResults[index],
-                                onTap: () => _showPgDetail(_searchResults[index]),
-                              ),
-                            );
-                          },
+                      decoration: InputDecoration(
+                        hintText: 'Search by name, location, rent, amenities...',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withOpacity(0.3),
+                          fontSize: 13.5,
                         ),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          color: _isFocused
+                              ? kLivinkeyGreen
+                              : kLivinkeyGreen.withOpacity(0.6),
+                          size: 22,
+                        ),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.08),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.close_rounded,
+                                    color: Colors.white.withOpacity(0.6),
+                                    size: 14,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _searchController.clear();
+                                    _searchQuery = '';
+                                  });
+                                  HapticFeedback.selectionClick();
+                                },
+                              )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 14,
+                        ),
+                        isDense: true,
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _searchQuery = value;
+                        });
+                      },
+                    ),
+                  ),
                 ),
-              ),
-            ],
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 3,
+                        height: 13,
+                        decoration: BoxDecoration(
+                          color: kLivinkeyGreen.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_searchResults.length} PG${_searchResults.length != 1 ? 's' : ''} found',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.45),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      0,
+                      20,
+                      bottomNavHeight + bottomSafeArea + 16,
+                    ),
+                    child: _searchResults.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(24),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.04),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.search_off_rounded,
+                                    color: Colors.white.withOpacity(0.15),
+                                    size: 56,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No PGs found',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.4),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Try adjusting your search',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.2),
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : GridView.builder(
+                            physics: const BouncingScrollPhysics(
+                              parent: AlwaysScrollableScrollPhysics(),
+                            ),
+                            padding: const EdgeInsets.only(bottom: 20),
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 14,
+                              mainAxisSpacing: 14,
+                              childAspectRatio: 0.75,
+                            ),
+                            itemCount: _searchResults.length,
+                            itemBuilder: (context, index) {
+                              return TweenAnimationBuilder<double>(
+                                duration: Duration(milliseconds: 300 + (index * 50)),
+                                curve: Curves.easeOutCubic,
+                                tween: Tween(begin: 0.0, end: 1.0),
+                                builder: (context, value, child) {
+                                  return Opacity(
+                                    opacity: value,
+                                    child: Transform.translate(
+                                      offset: Offset(0, 14 * (1 - value)),
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                child: PgCard(
+                                  pg: _searchResults[index],
+                                  onTap: () => _showPgDetail(_searchResults[index]),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

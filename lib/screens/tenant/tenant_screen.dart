@@ -3,12 +3,18 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../utils/constants.dart';
+import '../../utils/helpers.dart';
+import '../../services/notification_service.dart';
 import 'home_screen.dart';
 import 'payments_screen.dart';
 import 'maintenance_screen.dart';
 import 'documents_screen.dart';
 import 'profile_screen.dart';
 import 'tenant_drawer.dart';
+import '../common/notification_screen.dart';
+import '../auth/login_screen.dart';
+import '../guest/guest_screen.dart';
+import '../../widgets/common/snackbar_helper.dart';
 
 class TenantScreen extends StatefulWidget {
   const TenantScreen({super.key});
@@ -21,6 +27,8 @@ class TenantScreenState extends State<TenantScreen> {
   int _selectedIndex = 0;
   late final PageController _pageController;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final NotificationService _notificationService = NotificationService();
+  int _unreadCount = 0;
 
   static const List<Widget> _screens = [
     HomeScreen(),
@@ -34,6 +42,14 @@ class TenantScreenState extends State<TenantScreen> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 0);
+    _notificationService.initialize();
+    _updateUnreadCount();
+    
+    _notificationService.notificationsStream.listen((_) {
+      if (mounted) {
+        _updateUnreadCount();
+      }
+    });
   }
 
   @override
@@ -42,10 +58,14 @@ class TenantScreenState extends State<TenantScreen> {
     super.dispose();
   }
 
-  // Getter for selected index (used by child screens)
+  void _updateUnreadCount() {
+    setState(() {
+      _unreadCount = _notificationService.unreadCount;
+    });
+  }
+
   int get selectedIndex => _selectedIndex;
 
-  // Method to navigate to a specific tab (used by child screens)
   void navigateToTab(int index) {
     if (_selectedIndex != index) {
       _pageController.animateToPage(
@@ -57,12 +77,10 @@ class TenantScreenState extends State<TenantScreen> {
     HapticFeedback.lightImpact();
   }
 
-  // Method to open drawer (used by child screens)
   void openDrawer() {
     _scaffoldKey.currentState?.openDrawer();
   }
 
-  // Helper methods for floating tabs
   IconData _getIcon(int index) {
     const icons = [
       Icons.home_rounded,
@@ -79,15 +97,192 @@ class TenantScreenState extends State<TenantScreen> {
     return labels[index];
   }
 
+  void _showQuickActions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: kLivinkeyBlack,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Quick Actions',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildQuickActionItem(
+              icon: Icons.switch_account_rounded,
+              color: const Color(0xFFFF9800),
+              label: 'Enter as Guest',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => const GuestScreen()),
+                );
+                SnackbarHelper.showSuccess(context, 'Switched to Guest mode');
+              },
+            ),
+            const SizedBox(height: 10),
+            _buildQuickActionItem(
+              icon: Icons.logout_rounded,
+              color: Colors.red,
+              label: 'Logout',
+              onTap: () {
+                Navigator.pop(context);
+                _handleLogout();
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionItem({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color.withOpacity(0.1),
+              Colors.transparent,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: color.withOpacity(0.2),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Colors.white.withOpacity(0.2),
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleLogout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161616),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: Colors.white.withOpacity(0.08), width: 1),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.logout_rounded, color: Colors.red, size: 18),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Logout',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to logout?',
+          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.5),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+              SnackbarHelper.showSuccess(context, 'Logged out successfully');
+            },
+            child: const Text(
+              'Logout',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFloatingTab({
     required IconData icon,
     required String label,
     required bool isSelected,
     required VoidCallback onTap,
+    required VoidCallback? onLongPress,
   }) {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
+        onLongPress: label == 'Profile' ? onLongPress : null,
         behavior: HitTestBehavior.opaque,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
@@ -109,10 +304,6 @@ class TenantScreenState extends State<TenantScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              // Wrapping the label in a FittedBox lets it auto-scale down to
-              // fit the tab's available width instead of clipping/wrapping
-              // for longer words like "Maintenance", while short labels
-              // like "Home" keep rendering at full size.
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: AnimatedDefaultTextStyle(
@@ -139,17 +330,72 @@ class TenantScreenState extends State<TenantScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: kLivinkeyBlack,
-      drawer: const TenantDrawer(),
-      extendBody: true,
-      body: TenantScreenProvider(
-        openDrawer: openDrawer,
-        navigateToTab: navigateToTab,
-        child: Stack(
+    return WillPopScope(
+      onWillPop: () async {
+        return await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFF161616),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: Colors.white.withOpacity(0.08), width: 1),
+            ),
+            title: const Text(
+              'Exit App?',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            content: Text(
+              'Are you sure you want to exit the app?',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.6),
+                fontSize: 14,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [kLivinkeyGreen, Color(0xFF7CB342)],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Exit',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ) ?? false;
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: kLivinkeyBlack,
+        drawer: const TenantDrawer(),
+        extendBody: true,
+        body: Stack(
           children: [
-            // Ambient background glow for depth
             Positioned(
               top: -120,
               right: -80,
@@ -184,8 +430,6 @@ class TenantScreenState extends State<TenantScreen> {
                 ),
               ),
             ),
-
-            // Main PageView
             PageView(
               controller: _pageController,
               physics: const BouncingScrollPhysics(
@@ -195,79 +439,60 @@ class TenantScreenState extends State<TenantScreen> {
                 setState(() {
                   _selectedIndex = index;
                 });
+                if (index == 4) {
+                  _updateUnreadCount();
+                }
               },
               children: _screens,
             ),
           ],
         ),
-      ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(30),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.07),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.10),
-                  width: 1.2,
+        bottomNavigationBar: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(30),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.07),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.10),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.45),
+                      blurRadius: 30,
+                      offset: const Offset(0, -6),
+                    ),
+                    BoxShadow(
+                      color: kLivinkeyGreen.withOpacity(0.12),
+                      blurRadius: 32,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.45),
-                    blurRadius: 30,
-                    offset: const Offset(0, -6),
-                  ),
-                  BoxShadow(
-                    color: kLivinkeyGreen.withOpacity(0.12),
-                    blurRadius: 32,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(_screens.length, (index) {
-                  final isSelected = _selectedIndex == index;
-                  return _buildFloatingTab(
-                    icon: _getIcon(index),
-                    label: _getLabel(index),
-                    isSelected: isSelected,
-                    onTap: () => navigateToTab(index),
-                  );
-                }),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(_screens.length, (index) {
+                    final isSelected = _selectedIndex == index;
+                    return _buildFloatingTab(
+                      icon: _getIcon(index),
+                      label: _getLabel(index),
+                      isSelected: isSelected,
+                      onTap: () => navigateToTab(index),
+                      onLongPress: index == 4 ? _showQuickActions : null,
+                    );
+                  }),
+                ),
               ),
             ),
           ),
         ),
       ),
     );
-  }
-}
-
-// InheritedWidget to pass functions to child screens
-class TenantScreenProvider extends InheritedWidget {
-  final VoidCallback openDrawer;
-  final Function(int) navigateToTab;
-
-  const TenantScreenProvider({
-    super.key,
-    required this.openDrawer,
-    required this.navigateToTab,
-    required super.child,
-  });
-
-  static TenantScreenProvider? of(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<TenantScreenProvider>();
-  }
-
-  @override
-  bool updateShouldNotify(TenantScreenProvider oldWidget) {
-    return openDrawer != oldWidget.openDrawer ||
-        navigateToTab != oldWidget.navigateToTab;
   }
 }

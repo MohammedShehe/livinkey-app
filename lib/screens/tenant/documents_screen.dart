@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../utils/constants.dart';
+import '../../utils/helpers.dart';
 import '../../widgets/tenant/document_card.dart';
 import '../../widgets/common/snackbar_helper.dart';
 import '../../widgets/common/loading_indicator.dart';
@@ -24,6 +25,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   bool _isInternational = false;
+  bool _isRefreshing = false;
 
   // ---- Selection state -----------------------------------------------
   final Set<int> _selectedIndices = {};
@@ -73,6 +75,25 @@ class _DocumentsScreenState extends State<DocumentsScreen>
   void dispose() {
     _fadeController.dispose();
     super.dispose();
+  }
+
+  // Helper method to open drawer using the parent state
+  void _openDrawer() {
+    final state = context.findAncestorStateOfType<TenantScreenState>();
+    if (state != null) {
+      state.openDrawer();
+    } else {
+      Scaffold.of(context).openDrawer();
+    }
+  }
+
+  Future<void> _handleRefresh() async {
+    setState(() => _isRefreshing = true);
+    await Future.delayed(const Duration(seconds: 1));
+    if (mounted) {
+      setState(() => _isRefreshing = false);
+      SnackbarHelper.showSuccess(context, 'Documents refreshed');
+    }
   }
 
   Future<bool> _onWillPop() async {
@@ -266,14 +287,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                     ),
                     child: const Icon(Icons.menu_rounded, color: Colors.white, size: 22),
                   ),
-                  onPressed: () {
-                    final provider = TenantScreenProvider.of(context);
-                    if (provider != null) {
-                      provider.openDrawer();
-                    } else {
-                      Scaffold.of(context).openDrawer();
-                    }
-                  },
+                  onPressed: _openDrawer,
                 ),
           title: AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
@@ -360,161 +374,184 @@ class _DocumentsScreenState extends State<DocumentsScreen>
               ),
           ],
         ),
-        body: Stack(
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    kLivinkeyGreen.withOpacity(0.05),
-                    kLivinkeyBlack,
-                    kLivinkeyBlack,
-                  ],
-                  stops: const [0.0, 0.3, 1.0],
+        body: RefreshIndicator(
+          onRefresh: _handleRefresh,
+          color: kLivinkeyGreen,
+          backgroundColor: kLivinkeyBlack,
+          child: Stack(
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      kLivinkeyGreen.withOpacity(0.05),
+                      kLivinkeyBlack,
+                      kLivinkeyBlack,
+                    ],
+                    stops: const [0.0, 0.3, 1.0],
+                  ),
                 ),
-              ),
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      8,
-                      20,
-                      32 + navBarClearance + bottomSafeArea + 72,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 8),
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(
+                        parent: AlwaysScrollableScrollPhysics(),
+                      ),
+                      padding: EdgeInsets.fromLTRB(
+                        20,
+                        8,
+                        20,
+                        32 + navBarClearance + bottomSafeArea + 72,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 8),
 
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                kLivinkeyGreen.withOpacity(0.08),
-                                Colors.white.withOpacity(0.02),
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  kLivinkeyGreen.withOpacity(0.08),
+                                  Colors.white.withOpacity(0.02),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: kLivinkeyGreen.withOpacity(0.12),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: kLivinkeyGreen.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    Icons.info_outline_rounded,
+                                    color: kLivinkeyGreen.withOpacity(0.85),
+                                    size: 18,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _isSelectionMode
+                                        ? 'Tap documents to add or remove them from your selection'
+                                        : 'Tap to view a document · Hold to select multiple',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.65),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: kLivinkeyGreen.withOpacity(0.12),
-                              width: 1,
-                            ),
                           ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: kLivinkeyGreen.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(10),
+
+                          const SizedBox(height: 22),
+
+                          _buildSectionHeader('My Documents'),
+                          const SizedBox(height: 14),
+
+                          // Responsive Grid - adapts to screen size with better card fitting
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              // Determine crossAxisCount based on available width
+                              int crossAxisCount = 2;
+                              double childAspectRatio = 0.75;
+                              double crossAxisSpacing = 12;
+                              double mainAxisSpacing = 12;
+                              
+                              if (constraints.maxWidth > 600) {
+                                crossAxisCount = 3;
+                                childAspectRatio = 0.72;
+                                crossAxisSpacing = 14;
+                                mainAxisSpacing = 14;
+                              }
+                              if (constraints.maxWidth > 900) {
+                                crossAxisCount = 4;
+                                childAspectRatio = 0.70;
+                                crossAxisSpacing = 16;
+                                mainAxisSpacing = 16;
+                              }
+                              if (constraints.maxWidth < 380) {
+                                crossAxisCount = 2;
+                                childAspectRatio = 0.82;
+                                crossAxisSpacing = 10;
+                                mainAxisSpacing = 10;
+                              }
+                              
+                              return GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: crossAxisCount,
+                                  crossAxisSpacing: crossAxisSpacing,
+                                  mainAxisSpacing: mainAxisSpacing,
+                                  childAspectRatio: childAspectRatio,
                                 ),
-                                child: Icon(
-                                  Icons.info_outline_rounded,
-                                  color: kLivinkeyGreen.withOpacity(0.85),
-                                  size: 18,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  _isSelectionMode
-                                      ? 'Tap documents to add or remove them from your selection'
-                                      : 'Tap to view a document · Hold to select multiple',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.65),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
+                                itemCount: _docs.length,
+                                itemBuilder: (context, index) {
+                                  final hasPhoto = DateTime.now().millisecondsSinceEpoch % 3 != 0;
+                                  final bool isSelected = _selectedIndices.contains(index);
+
+                                  return _SelectableDocument(
+                                    isSelected: isSelected,
+                                    isSelectionMode: _isSelectionMode,
+                                    onLongPress: () => _toggleSelection(index),
+                                    child: DocumentCard(
+                                      doc: _docs[index],
+                                      hasPhoto: hasPhoto,
+                                      onTap: () => _handleCardTap(index),
+                                    ),
+                                  );
+                                },
+                              );
+                            },
                           ),
-                        ),
-
-                        const SizedBox(height: 22),
-
-                        _buildSectionHeader('My Documents'),
-                        const SizedBox(height: 14),
-
-                        // Responsive Grid - adapts to screen size
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            // Determine crossAxisCount based on available width
-                            int crossAxisCount = 2;
-                            if (constraints.maxWidth > 600) {
-                              crossAxisCount = 3;
-                            }
-                            if (constraints.maxWidth > 900) {
-                              crossAxisCount = 4;
-                            }
-                            
-                            return GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: crossAxisCount,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
-                                childAspectRatio: 0.75,
-                              ),
-                              itemCount: _docs.length,
-                              itemBuilder: (context, index) {
-                                final hasPhoto = DateTime.now().millisecondsSinceEpoch % 3 != 0;
-                                final bool isSelected = _selectedIndices.contains(index);
-
-                                return _SelectableDocument(
-                                  isSelected: isSelected,
-                                  isSelectionMode: _isSelectionMode,
-                                  onLongPress: () => _toggleSelection(index),
-                                  child: DocumentCard(
-                                    doc: _docs[index],
-                                    hasPhoto: hasPhoto,
-                                    onTap: () => _handleCardTap(index),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
 
-            // ---- Pinned action bar --------------------------------------
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: navBarClearance + bottomSafeArea - 16,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                transitionBuilder: (child, anim) => FadeTransition(
-                  opacity: anim,
-                  child: SlideTransition(
-                    position: Tween<Offset>(
-                      begin: const Offset(0, 0.15),
-                      end: Offset.zero,
-                    ).animate(anim),
-                    child: child,
+              // ---- Pinned action bar --------------------------------------
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: navBarClearance + bottomSafeArea - 16,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  transitionBuilder: (child, anim) => FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0, 0.15),
+                        end: Offset.zero,
+                      ).animate(anim),
+                      child: child,
+                    ),
                   ),
+                  child: _isSelectionMode
+                      ? _buildSelectionBar(key: const ValueKey('selection-bar'))
+                      : _buildDefaultBar(key: const ValueKey('default-bar')),
                 ),
-                child: _isSelectionMode
-                    ? _buildSelectionBar(key: const ValueKey('selection-bar'))
-                    : _buildDefaultBar(key: const ValueKey('default-bar')),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

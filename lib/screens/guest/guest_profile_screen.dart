@@ -59,6 +59,18 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
     super.dispose();
   }
 
+  // Helper method to open drawer using the parent state
+  void _openDrawer() {
+    // Try to find the GuestScreenState in the widget tree
+    final state = context.findAncestorStateOfType<GuestScreenState>();
+    if (state != null) {
+      state.openDrawer();
+    } else {
+      // Fallback: use Scaffold
+      Scaffold.of(context).openDrawer();
+    }
+  }
+
   void _showEditProfile() {
     final TextEditingController nameController = 
         TextEditingController(text: guest.fullName);
@@ -205,7 +217,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20), // Extra bottom padding for the sheet
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
@@ -381,7 +393,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                             ),
                           ),
                         ),
-                        const SizedBox(height: 20), // Extra bottom padding for the sheet
+                        const SizedBox(height: 20),
                       ],
                     ),
                   ),
@@ -469,7 +481,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
     
     // Get the height of the bottom navigation bar (floating tabs)
     // This ensures our content clears the navigation bar
-    final double bottomNavHeight = 76.0; // Approximate height of the floating nav bar
+    final double bottomNavHeight = 76.0;
     final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
@@ -488,14 +500,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
             ),
             child: const Icon(Icons.menu_rounded, color: Colors.white, size: 20),
           ),
-          onPressed: () {
-            final provider = GuestScreenProvider.of(context);
-            if (provider != null) {
-              provider.openDrawer();
-            } else {
-              Scaffold.of(context).openDrawer();
-            }
-          },
+          onPressed: _openDrawer,
         ),
         title: const Text(
           'Profile',
@@ -559,12 +564,6 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
           position: _slideAnimation,
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            // Add extra bottom padding to clear the floating navigation bar
-            // The padding includes: 
-            // - 32 (base bottom padding for the scroll view)
-            // - bottomNavHeight (to clear the floating nav bar)
-            // - bottomSafeArea (to account for device safe areas)
-            // - Extra 16 for comfortable spacing
             padding: EdgeInsets.fromLTRB(
               20, 
               8, 

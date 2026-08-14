@@ -7,6 +7,9 @@ import '../../widgets/guest/pg_card.dart';
 import '../../widgets/guest/pg_detail_modal.dart';
 import '../../models/pg_model.dart';
 import 'guest_screen.dart';
+import '../../services/notification_service.dart';
+import '../common/notification_screen.dart';
+import '../../widgets/common/snackbar_helper.dart';
 
 class GuestHomeScreen extends StatefulWidget {
   const GuestHomeScreen({super.key});
@@ -25,6 +28,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
   late Animation<Offset> _slideAnimation;
   String _selectedFilter = 'All';
   final String guestName = 'Guest User';
+  bool _isRefreshing = false;
 
   final List<PgModel> _allPgs = [
     PgModel(
@@ -182,6 +186,15 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
     super.dispose();
   }
 
+  Future<void> _handleRefresh() async {
+    setState(() => _isRefreshing = true);
+    await Future.delayed(const Duration(seconds: 1));
+    if (mounted) {
+      setState(() => _isRefreshing = false);
+      SnackbarHelper.showSuccess(context, 'Refreshed successfully!');
+    }
+  }
+
   void _showPgDetail(PgModel pg) {
     HapticFeedback.lightImpact();
     showModalBottomSheet(
@@ -194,13 +207,22 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
 
   double _getLogoSize(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
-    // Even larger logo sizes for all screen types
     if (screenWidth >= 600) {
-      return 120.0; // Increased from 100 to 120
+      return 120.0;
     } else if (screenWidth >= 400) {
-      return 64.0; // Increased from 52 to 64
+      return 64.0;
     } else {
-      return 50.0; // Increased from 42 to 50
+      return 50.0;
+    }
+  }
+
+  // Helper method to open drawer using the parent state
+  void _openDrawer() {
+    final state = context.findAncestorStateOfType<GuestScreenState>();
+    if (state != null) {
+      state.openDrawer();
+    } else {
+      Scaffold.of(context).openDrawer();
     }
   }
 
@@ -209,9 +231,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
     super.build(context);
 
     final double logoSize = _getLogoSize(context);
-    // Get the height of the bottom navigation bar (floating tabs)
-    // This ensures our content clears the navigation bar
-    final double bottomNavHeight = 76.0; // Approximate height of the floating nav bar
+    final double bottomNavHeight = 76.0;
     final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
@@ -221,7 +241,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
         elevation: 0,
         backgroundColor: kLivinkeyBlack,
         surfaceTintColor: Colors.transparent,
-        toolbarHeight: 72, // Increased toolbar height to accommodate larger logo
+        toolbarHeight: 72,
         leading: IconButton(
           icon: Container(
             padding: const EdgeInsets.all(8),
@@ -232,14 +252,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
             ),
             child: const Icon(Icons.menu_rounded, color: Colors.white, size: 20),
           ),
-          onPressed: () {
-            final provider = GuestScreenProvider.of(context);
-            if (provider != null) {
-              provider.openDrawer();
-            } else {
-              Scaffold.of(context).openDrawer();
-            }
-          },
+          onPressed: _openDrawer,
         ),
         title: Image.asset(
           kGeneralLogo,
@@ -248,6 +261,8 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
         ),
         centerTitle: false,
         actions: [
+          // Notification Bell Icon - Now visible in Guest
+          const _NotificationBell(),
           Container(
             margin: const EdgeInsets.only(right: 16),
             decoration: BoxDecoration(
@@ -294,240 +309,243 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
           ),
         ],
       ),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 3,
-                          height: 14,
-                          decoration: BoxDecoration(
-                            color: kLivinkeyGreen,
-                            borderRadius: BorderRadius.circular(4),
+      body: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        color: kLivinkeyGreen,
+        backgroundColor: kLivinkeyBlack,
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 3,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: kLivinkeyGreen,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Good ${getTimeOfDay()}',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.5),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 11),
+                        child: ShaderMask(
+                          shaderCallback: (bounds) => LinearGradient(
+                            colors: [Colors.white, Colors.white.withOpacity(0.85)],
+                          ).createShader(bounds),
+                          child: Text(
+                            guestName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Good ${getTimeOfDay()}',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        kLivinkeyGreen.withOpacity(0.14),
+                        kLivinkeyGreen.withOpacity(0.02),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 11),
-                      child: ShaderMask(
-                        shaderCallback: (bounds) => LinearGradient(
-                          colors: [Colors.white, Colors.white.withOpacity(0.85)],
-                        ).createShader(bounds),
-                        child: Text(
-                          guestName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                      ),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: kLivinkeyGreen.withOpacity(0.18),
+                      width: 1,
                     ),
-                  ],
-                ),
-              ),
-
-              Container(
-                margin: const EdgeInsets.fromLTRB(20, 14, 20, 4),
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      kLivinkeyGreen.withOpacity(0.14),
-                      kLivinkeyGreen.withOpacity(0.02),
+                    boxShadow: [
+                      BoxShadow(
+                        color: kLivinkeyGreen.withOpacity(0.06),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: kLivinkeyGreen.withOpacity(0.18),
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: kLivinkeyGreen.withOpacity(0.06),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [kLivinkeyGreen, const Color(0xFF66BB6A)],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: kLivinkeyGreen.withOpacity(0.4),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.home_rounded,
-                        color: Colors.black,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Find your perfect home',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.95),
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            '$_vacantCount PGs available right now',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.55),
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 18),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      _buildFilterChip('All', Icons.grid_view_rounded),
-                      const SizedBox(width: 10),
-                      _buildFilterChip('Vacant', Icons.check_circle_outline_rounded),
-                      const SizedBox(width: 10),
-                      _buildFilterChip('Full Occupied', Icons.block_rounded),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [kLivinkeyGreen, const Color(0xFF66BB6A)],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: kLivinkeyGreen.withOpacity(0.4),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.home_rounded,
+                          color: Colors.black,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Find your perfect home',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.95),
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              '$_vacantCount PGs available right now',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.55),
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 16),
-
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    20, 
-                    0, 
-                    20, 
-                    bottomNavHeight + bottomSafeArea + 16,
+                const SizedBox(height: 18),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildFilterChip('All', Icons.grid_view_rounded),
+                        const SizedBox(width: 10),
+                        _buildFilterChip('Vacant', Icons.check_circle_outline_rounded),
+                        const SizedBox(width: 10),
+                        _buildFilterChip('Full Occupied', Icons.block_rounded),
+                      ],
+                    ),
                   ),
-                  child: _filteredPgs.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(24),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.04),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.home_work_rounded,
-                                  color: Colors.white.withOpacity(0.15),
-                                  size: 56,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No PGs available',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.4),
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Try a different filter',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.2),
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      : GridView.builder(
-                          physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.only(bottom: 20),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 14,
-                            mainAxisSpacing: 14,
-                            childAspectRatio: 0.75,
-                          ),
-                          itemCount: _filteredPgs.length,
-                          itemBuilder: (context, index) {
-                            return TweenAnimationBuilder<double>(
-                              duration: Duration(milliseconds: 350 + (index * 60)),
-                              curve: Curves.easeOutCubic,
-                              tween: Tween(begin: 0.0, end: 1.0),
-                              builder: (context, value, child) {
-                                return Opacity(
-                                  opacity: value,
-                                  child: Transform.translate(
-                                    offset: Offset(0, 16 * (1 - value)),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: PgCard(
-                                pg: _filteredPgs[index],
-                                onTap: () => _showPgDetail(_filteredPgs[index]),
-                              ),
-                            );
-                          },
-                        ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Expanded(
+                  child: Padding(
+                    // FIXED: Reduced bottom padding to give more content area
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      0,
+                      20,
+                      bottomNavHeight + bottomSafeArea + 8, // Reduced from 16 to 8
+                    ),
+                    child: _filteredPgs.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(24),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.04),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.home_work_rounded,
+                                    color: Colors.white.withOpacity(0.15),
+                                    size: 56,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No PGs available',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.4),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Try a different filter',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.2),
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : GridView.builder(
+                            physics: const BouncingScrollPhysics(
+                              parent: AlwaysScrollableScrollPhysics(),
+                            ),
+                            padding: const EdgeInsets.only(bottom: 20),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 14,
+                              mainAxisSpacing: 14,
+                              childAspectRatio: 0.75,
+                            ),
+                            itemCount: _filteredPgs.length,
+                            itemBuilder: (context, index) {
+                              return TweenAnimationBuilder<double>(
+                                duration: Duration(milliseconds: 350 + (index * 60)),
+                                curve: Curves.easeOutCubic,
+                                tween: Tween(begin: 0.0, end: 1.0),
+                                builder: (context, value, child) {
+                                  return Opacity(
+                                    opacity: value,
+                                    child: Transform.translate(
+                                      offset: Offset(0, 16 * (1 - value)),
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                child: PgCard(
+                                  pg: _filteredPgs[index],
+                                  onTap: () => _showPgDetail(_filteredPgs[index]),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -627,6 +645,79 @@ class _PulsingDotState extends State<_PulsingDot>
         CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
       ),
       child: const Icon(Icons.circle, color: Color(0xFFFF9800), size: 8),
+    );
+  }
+}
+
+// Notification Bell Widget - Also used in Tenant
+class _NotificationBell extends StatefulWidget {
+  const _NotificationBell();
+
+  @override
+  State<_NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<_NotificationBell> {
+  int _unreadCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateCount();
+  }
+
+  void _updateCount() {
+    setState(() {
+      _unreadCount = NotificationService().unreadCount;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        IconButton(
+          icon: Icon(
+            Icons.notifications_none_rounded,
+            color: Colors.white.withOpacity(0.8),
+            size: 26,
+          ),
+          onPressed: () {
+            hapticFeedback();
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const NotificationScreen(),
+              ),
+            ).then((_) => _updateCount());
+          },
+        ),
+        if (_unreadCount > 0)
+          Positioned(
+            right: 4,
+            top: 4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Text(
+                _unreadCount > 9 ? '9+' : '$_unreadCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

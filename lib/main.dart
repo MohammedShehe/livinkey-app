@@ -1,3 +1,4 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'screens/splash_screen.dart';
 import 'widgets/livinkey_logo.dart';
@@ -23,6 +24,8 @@ class LivinkeyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: const SplashScreen(),
+      // Add navigation observers for better route management
+      navigatorObservers: [RouteObserver()],
     );
   }
 }

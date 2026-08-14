@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../utils/constants.dart';
+import '../../utils/helpers.dart';
 import '../../widgets/tenant/payment_chip.dart';
 import '../../widgets/common/snackbar_helper.dart';
 import 'tenant_screen.dart';
@@ -23,6 +24,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   int _selectedPaymentMethod = 0;
+  bool _isRefreshing = false;
 
   // Payment proof form controllers
   final TextEditingController _transactionIdController = TextEditingController();
@@ -54,6 +56,25 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     _transactionIdController.dispose();
     _amountController.dispose();
     super.dispose();
+  }
+
+  // Helper method to open drawer using the parent state
+  void _openDrawer() {
+    final state = context.findAncestorStateOfType<TenantScreenState>();
+    if (state != null) {
+      state.openDrawer();
+    } else {
+      Scaffold.of(context).openDrawer();
+    }
+  }
+
+  Future<void> _handleRefresh() async {
+    setState(() => _isRefreshing = true);
+    await Future.delayed(const Duration(seconds: 1));
+    if (mounted) {
+      setState(() => _isRefreshing = false);
+      SnackbarHelper.showSuccess(context, 'Payments refreshed');
+    }
   }
 
   Future<bool> _onWillPop() async {
@@ -140,9 +161,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   Widget build(BuildContext context) {
     super.build(context);
 
-    // Get bottom padding for navigation bar
     final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
-    // Height reserved so content clears the TenantScreen's floating glass nav bar
     const double navBarClearance = 96.0;
 
     return WillPopScope(
@@ -162,14 +181,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
               ),
               child: const Icon(Icons.menu_rounded, color: Colors.white, size: 22),
             ),
-            onPressed: () {
-              final provider = TenantScreenProvider.of(context);
-              if (provider != null) {
-                provider.openDrawer();
-              } else {
-                Scaffold.of(context).openDrawer();
-              }
-            },
+            onPressed: _openDrawer,
           ),
           title: const Text(
             'Payments',
@@ -198,79 +210,83 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             const SizedBox(width: 8),
           ],
         ),
-        body: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                kLivinkeyGreen.withOpacity(0.05),
-                kLivinkeyBlack,
-                kLivinkeyBlack,
-              ],
-              stops: const [0.0, 0.3, 1.0],
+        body: RefreshIndicator(
+          onRefresh: _handleRefresh,
+          color: kLivinkeyGreen,
+          backgroundColor: kLivinkeyBlack,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  kLivinkeyGreen.withOpacity(0.05),
+                  kLivinkeyBlack,
+                  kLivinkeyBlack,
+                ],
+                stops: const [0.0, 0.3, 1.0],
+              ),
             ),
-          ),
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                // Add extra bottom padding to ensure content clears the nav bar
-                padding: EdgeInsets.fromLTRB(
-                  20, 
-                  8, 
-                  20, 
-                  32 + navBarClearance + bottomSafeArea,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    8,
+                    20,
+                    32 + navBarClearance + bottomSafeArea,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 8),
 
-                    _buildPaymentStats(),
-                    const SizedBox(height: 28),
+                      _buildPaymentStats(),
+                      const SizedBox(height: 28),
 
-                    _buildSectionHeader('Payment Method'),
-                    const SizedBox(height: 14),
+                      _buildSectionHeader('Payment Method'),
+                      const SizedBox(height: 14),
 
-                    Row(
-                      children: [
-                        PaymentChip(
-                          label: 'Pay Online',
-                          isSelected: _selectedPaymentMethod == 0,
-                          onTap: () => setState(() => _selectedPaymentMethod = 0),
-                        ),
-                        const SizedBox(width: 10),
-                        PaymentChip(
-                          label: 'Pay Cash',
-                          isSelected: _selectedPaymentMethod == 1,
-                          onTap: () => setState(() => _selectedPaymentMethod = 1),
-                        ),
-                        const SizedBox(width: 10),
-                        PaymentChip(
-                          label: 'Partial Payment',
-                          isSelected: _selectedPaymentMethod == 2,
-                          onTap: () => setState(() => _selectedPaymentMethod = 2),
-                        ),
-                      ],
-                    ),
+                      Row(
+                        children: [
+                          PaymentChip(
+                            label: 'Pay Online',
+                            isSelected: _selectedPaymentMethod == 0,
+                            onTap: () => setState(() => _selectedPaymentMethod = 0),
+                          ),
+                          const SizedBox(width: 10),
+                          PaymentChip(
+                            label: 'Pay Cash',
+                            isSelected: _selectedPaymentMethod == 1,
+                            onTap: () => setState(() => _selectedPaymentMethod = 1),
+                          ),
+                          const SizedBox(width: 10),
+                          PaymentChip(
+                            label: 'Partial Payment',
+                            isSelected: _selectedPaymentMethod == 2,
+                            onTap: () => setState(() => _selectedPaymentMethod = 2),
+                          ),
+                        ],
+                      ),
 
-                    const SizedBox(height: 20),
-                    _buildQRSection(),
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 20),
+                      _buildQRSection(),
+                      const SizedBox(height: 16),
 
-                    // Meter Section
-                    _buildSectionHeader('Electricity Meter'),
-                    const SizedBox(height: 12),
-                    _buildMeterCard(),
-                    const SizedBox(height: 20),
+                      _buildSectionHeader('Electricity Meter'),
+                      const SizedBox(height: 12),
+                      _buildMeterCard(),
+                      const SizedBox(height: 20),
 
-                    // Submit Payment Proof Button - Now with proper spacing
-                    _buildSubmitProofButton(),
-                    const SizedBox(height: 8),
-                  ],
+                      _buildSubmitProofButton(),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1025,7 +1041,6 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                   ),
                   const SizedBox(height: 20),
                   
-                  // Transaction ID
                   TextField(
                     controller: _transactionIdController,
                     style: const TextStyle(color: Colors.white),
@@ -1064,7 +1079,6 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                   ),
                   const SizedBox(height: 14),
                   
-                  // Amount
                   TextField(
                     controller: _amountController,
                     style: const TextStyle(color: Colors.white),
@@ -1104,7 +1118,6 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                   ),
                   const SizedBox(height: 14),
                   
-                  // Payment Screenshot Upload
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(16),
@@ -1174,7 +1187,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                                 Navigator.pop(context);
                                 _transactionIdController.clear();
                                 _amountController.clear();
-                                SnackbarHelper.show(
+                                SnackbarHelper.showSuccess(
                                   context,
                                   'Payment proof submitted successfully!',
                                 );
