@@ -15,6 +15,11 @@ class PgCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // FIXED: Use statusText instead of status
+    final String statusText = pg.statusText;
+    final bool isVacant = statusText == 'Vacant';
+    final int availableRooms = pg.totalCapacity - pg.totalOccupied;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -39,22 +44,42 @@ class PgCard extends StatelessWidget {
             // Image with status badge
             Stack(
               children: [
+                // FIXED: Use coverImage if available, otherwise show placeholder
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(16),
                   ),
-                  child: Container(
-                    height: 120,
-                    width: double.infinity,
-                    color: kLivinkeyGreen.withOpacity(0.1),
-                    child: Icon(
-                      Icons.home_work_rounded,
-                      color: kLivinkeyGreen.withOpacity(0.3),
-                      size: 48,
-                    ),
-                  ),
+                  child: pg.coverImage != null
+                      ? Image.network(
+                          pg.coverImage!,
+                          height: 120,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              height: 120,
+                              width: double.infinity,
+                              color: kLivinkeyGreen.withOpacity(0.1),
+                              child: Icon(
+                                Icons.home_work_rounded,
+                                color: kLivinkeyGreen.withOpacity(0.3),
+                                size: 48,
+                              ),
+                            );
+                          },
+                        )
+                      : Container(
+                          height: 120,
+                          width: double.infinity,
+                          color: kLivinkeyGreen.withOpacity(0.1),
+                          child: Icon(
+                            Icons.home_work_rounded,
+                            color: kLivinkeyGreen.withOpacity(0.3),
+                            size: 48,
+                          ),
+                        ),
                 ),
-                // Status Badge
+                // FIXED: Use statusText instead of status
                 Positioned(
                   top: 8,
                   left: 8,
@@ -64,13 +89,11 @@ class PgCard extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: pg.status == 'Vacant'
-                          ? kLivinkeyGreen
-                          : Colors.red,
+                      color: isVacant ? kLivinkeyGreen : Colors.red,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      pg.status,
+                      statusText,
                       style: const TextStyle(
                         color: Colors.black,
                         fontSize: 10,
@@ -101,7 +124,7 @@ class PgCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 2),
                         Text(
-                          pg.rating.toString(),
+                          pg.rating.toStringAsFixed(1),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 10,
@@ -172,10 +195,11 @@ class PgCard extends StatelessWidget {
                         size: 12,
                       ),
                       const SizedBox(width: 2),
+                      // FIXED: Use availableRooms calculated from totalCapacity - totalOccupied
                       Text(
-                        '${pg.availableRooms} vacant',
+                        '$availableRooms vacant',
                         style: TextStyle(
-                          color: pg.availableRooms > 0
+                          color: availableRooms > 0
                               ? kLivinkeyGreen.withOpacity(0.7)
                               : Colors.red.withOpacity(0.5),
                           fontSize: 10,
@@ -189,7 +213,7 @@ class PgCard extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '₹${pg.rent}/mo',
+                        '₹${pg.rent.toStringAsFixed(0)}/mo',
                         style: const TextStyle(
                           color: kLivinkeyGreen,
                           fontSize: 14,

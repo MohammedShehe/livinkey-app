@@ -1,16 +1,17 @@
-// lib/screens/guest/guest_screen.dart
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../services/notification_service.dart';
+import '../../services/api_service.dart';
 import 'guest_home_screen.dart';
 import 'guest_search_screen.dart';
 import 'guest_profile_screen.dart';
 import '../common/notification_screen.dart';
 import '../../widgets/guest/guest_drawer.dart';
 import '../auth/login_screen.dart';
+import '../tenant/tenant_screen.dart';
 import '../../widgets/common/snackbar_helper.dart';
 
 class GuestScreen extends StatefulWidget {
@@ -25,6 +26,7 @@ class GuestScreenState extends State<GuestScreen> {
   late final PageController _pageController;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final NotificationService _notificationService = NotificationService();
+  final ApiService _api = ApiService();
   int _unreadCount = 0;
 
   static const List<Widget> _screens = [
@@ -118,6 +120,30 @@ class GuestScreenState extends State<GuestScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            _buildQuickActionItem(
+              icon: Icons.switch_account_rounded,
+              color: kLivinkeyGreen,
+              label: 'Switch to Tenant',
+              onTap: () async {
+                Navigator.pop(context);
+                try {
+                  // ============================================================
+                  // FIXED: Proper role switching with token management
+                  // ============================================================
+                  final success = await _api.switchToRole('tenant');
+                  if (success) {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const TenantScreen()),
+                    );
+                    SnackbarHelper.showSuccess(context, 'Switched to Tenant mode');
+                  } else {
+                    SnackbarHelper.showError(context, 'Failed to switch to tenant');
+                  }
+                } catch (e) {
+                  SnackbarHelper.showError(context, 'Error switching to tenant');
+                }
+              },
+            ),
             _buildQuickActionItem(
               icon: Icons.logout_rounded,
               color: Colors.red,
@@ -233,8 +259,9 @@ class GuestScreenState extends State<GuestScreen> {
             ),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
+              await _api.clearToken();
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
               );

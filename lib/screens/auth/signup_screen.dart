@@ -1,12 +1,13 @@
+// lib/screens/auth/signup_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
-import '../../widgets/livinkey_logo.dart';
+
+import '../../services/api_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../widgets/common/snackbar_helper.dart';
 import 'login_screen.dart';
-import 'otp_verification_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -17,7 +18,6 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen>
     with TickerProviderStateMixin {
-  // Controllers
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
@@ -31,7 +31,6 @@ class _SignUpScreenState extends State<SignUpScreen>
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
-  // State variables
   String _selectedNationality = 'Indian';
   String _selectedCountryCode = '+91';
   bool _isLoading = false;
@@ -39,11 +38,9 @@ class _SignUpScreenState extends State<SignUpScreen>
   bool _obscureConfirmPassword = true;
   bool _agreeToTerms = false;
 
-  // Dropdown states
   bool _isNationalityDropdownOpen = false;
   bool _isCountryCodeDropdownOpen = false;
 
-  // Animations
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late Animation<double> _fadeAnimation;
@@ -51,203 +48,48 @@ class _SignUpScreenState extends State<SignUpScreen>
   late Animation<double> _scaleAnimation;
   late Animation<double> _logoScaleAnimation;
 
-  // Gesture recognizers
   late final TapGestureRecognizer _backToLoginRecognizer;
   late final TapGestureRecognizer _termsRecognizer;
   late final TapGestureRecognizer _privacyRecognizer;
 
-  // Nationalities data
+  final ApiService _api = ApiService();
+
   final List<String> _allNationalities = [
-    'Afghan',
-    'Albanian',
-    'Algerian',
-    'American',
-    'Andorran',
-    'Angolan',
-    'Antiguan',
-    'Argentinian',
-    'Armenian',
-    'Australian',
-    'Austrian',
-    'Azerbaijani',
-    'Bahamian',
-    'Bahraini',
-    'Bangladeshi',
-    'Barbadian',
-    'Barbudan',
-    'Belarusian',
-    'Belgian',
-    'Belizean',
-    'Beninese',
-    'Bhutanese',
-    'Bolivian',
-    'Bosnian',
-    'Botswanan',
-    'Brazilian',
-    'British',
-    'Bruneian',
-    'Bulgarian',
-    'Burkinabe',
-    'Burmese',
-    'Burundian',
-    'Cambodian',
-    'Cameroonian',
-    'Canadian',
-    'Cape Verdean',
-    'Central African',
-    'Chadian',
-    'Chilean',
-    'Chinese',
-    'Colombian',
-    'Comorian',
-    'Congolese',
-    'Costa Rican',
-    'Croatian',
-    'Cuban',
-    'Cypriot',
-    'Czech',
-    'Danish',
-    'Djiboutian',
-    'Dominican',
-    'Dutch',
-    'Ecuadorian',
-    'Egyptian',
-    'Emirati',
-    'Equatorial Guinean',
-    'Eritrean',
-    'Estonian',
-    'Ethiopian',
-    'Fijian',
-    'Filipino',
-    'Finnish',
-    'French',
-    'Gabonese',
-    'Gambian',
-    'Georgian',
-    'German',
-    'Ghanaian',
-    'Greek',
-    'Grenadian',
-    'Guatemalan',
-    'Guinean',
-    'Guyanese',
-    'Haitian',
-    'Honduran',
-    'Hungarian',
-    'Icelandic',
-    'Indian',
-    'Indonesian',
-    'Iranian',
-    'Iraqi',
-    'Irish',
-    'Israeli',
-    'Italian',
-    'Jamaican',
-    'Japanese',
-    'Jordanian',
-    'Kazakh',
-    'Kenyan',
-    'Kittitian',
-    'Kuwaiti',
-    'Kyrgyz',
-    'Laotian',
-    'Latvian',
-    'Lebanese',
-    'Liberian',
-    'Libyan',
-    'Liechtensteiner',
-    'Lithuanian',
-    'Luxembourgish',
-    'Malagasy',
-    'Malawian',
-    'Malaysian',
-    'Maldivian',
-    'Malian',
-    'Maltese',
-    'Marshallese',
-    'Mauritanian',
-    'Mauritian',
-    'Mexican',
-    'Micronesian',
-    'Moldovan',
-    'Monacan',
-    'Mongolian',
-    'Montenegrin',
-    'Moroccan',
-    'Mozambican',
-    'Namibian',
-    'Nauruan',
-    'Nepali',
-    'New Zealander',
-    'Nicaraguan',
-    'Nigerian',
-    'North Korean',
-    'Norwegian',
-    'Omani',
-    'Pakistani',
-    'Palauan',
-    'Panamanian',
-    'Papua New Guinean',
-    'Paraguayan',
-    'Peruvian',
-    'Polish',
-    'Portuguese',
-    'Qatari',
-    'Romanian',
-    'Russian',
-    'Rwandan',
-    'Salvadoran',
-    'Samoan',
-    'Sao Tomean',
-    'Saudi',
-    'Senegalese',
-    'Serbian',
-    'Seychellois',
-    'Sierra Leonean',
-    'Singaporean',
-    'Slovak',
-    'Slovenian',
-    'Solomon Islander',
-    'Somali',
-    'South African',
-    'South Korean',
-    'South Sudanese',
-    'Spanish',
-    'Sri Lankan',
-    'Sudanese',
-    'Surinamese',
-    'Swazi',
-    'Swedish',
-    'Swiss',
-    'Syrian',
-    'Taiwanese',
-    'Tajik',
-    'Tanzanian',
-    'Thai',
-    'Timorese',
-    'Togolese',
-    'Tongan',
-    'Trinidadian',
-    'Tunisian',
-    'Turkish',
-    'Turkmen',
-    'Tuvaluan',
-    'Ugandan',
-    'Ukrainian',
-    'Uruguayan',
-    'Uzbek',
-    'Vanuatuan',
-    'Vatican',
-    'Venezuelan',
-    'Vietnamese',
-    'Yemeni',
-    'Zambian',
-    'Zimbabwean',
+    'Afghan', 'Albanian', 'Algerian', 'American', 'Andorran', 'Angolan',
+    'Antiguan', 'Argentinian', 'Armenian', 'Australian', 'Austrian', 'Azerbaijani',
+    'Bahamian', 'Bahraini', 'Bangladeshi', 'Barbadian', 'Barbudan', 'Belarusian',
+    'Belgian', 'Belizean', 'Beninese', 'Bhutanese', 'Bolivian', 'Bosnian',
+    'Botswanan', 'Brazilian', 'British', 'Bruneian', 'Bulgarian', 'Burkinabe',
+    'Burmese', 'Burundian', 'Cambodian', 'Cameroonian', 'Canadian', 'Cape Verdean',
+    'Central African', 'Chadian', 'Chilean', 'Chinese', 'Colombian', 'Comorian',
+    'Congolese', 'Costa Rican', 'Croatian', 'Cuban', 'Cypriot', 'Czech', 'Danish',
+    'Djiboutian', 'Dominican', 'Dutch', 'Ecuadorian', 'Egyptian', 'Emirati',
+    'Equatorial Guinean', 'Eritrean', 'Estonian', 'Ethiopian', 'Fijian', 'Filipino',
+    'Finnish', 'French', 'Gabonese', 'Gambian', 'Georgian', 'German', 'Ghanaian',
+    'Greek', 'Grenadian', 'Guatemalan', 'Guinean', 'Guyanese', 'Haitian',
+    'Honduran', 'Hungarian', 'Icelandic', 'Indian', 'Indonesian', 'Iranian',
+    'Iraqi', 'Irish', 'Israeli', 'Italian', 'Jamaican', 'Japanese', 'Jordanian',
+    'Kazakh', 'Kenyan', 'Kittitian', 'Kuwaiti', 'Kyrgyz', 'Laotian', 'Latvian',
+    'Lebanese', 'Liberian', 'Libyan', 'Liechtensteiner', 'Lithuanian',
+    'Luxembourgish', 'Malagasy', 'Malawian', 'Malaysian', 'Maldivian', 'Malian',
+    'Maltese', 'Marshallese', 'Mauritanian', 'Mauritian', 'Mexican', 'Micronesian',
+    'Moldovan', 'Monacan', 'Mongolian', 'Montenegrin', 'Moroccan', 'Mozambican',
+    'Namibian', 'Nauruan', 'Nepali', 'New Zealander', 'Nicaraguan', 'Nigerian',
+    'North Korean', 'Norwegian', 'Omani', 'Pakistani', 'Palauan', 'Panamanian',
+    'Papua New Guinean', 'Paraguayan', 'Peruvian', 'Polish', 'Portuguese',
+    'Qatari', 'Romanian', 'Russian', 'Rwandan', 'Salvadoran', 'Samoan',
+    'Sao Tomean', 'Saudi', 'Senegalese', 'Serbian', 'Seychellois',
+    'Sierra Leonean', 'Singaporean', 'Slovak', 'Slovenian', 'Solomon Islander',
+    'Somali', 'South African', 'South Korean', 'South Sudanese', 'Spanish',
+    'Sri Lankan', 'Sudanese', 'Surinamese', 'Swazi', 'Swedish', 'Swiss', 'Syrian',
+    'Taiwanese', 'Tajik', 'Tanzanian', 'Thai', 'Timorese', 'Togolese', 'Tongan',
+    'Trinidadian', 'Tunisian', 'Turkish', 'Turkmen', 'Tuvaluan', 'Ugandan',
+    'Ukrainian', 'Uruguayan', 'Uzbek', 'Vanuatuan', 'Vatican', 'Venezuelan',
+    'Vietnamese', 'Yemeni', 'Zambian', 'Zimbabwean',
   ];
 
   List<String> _filteredNationalities = [];
 
-  // Country codes data
   final List<Map<String, String>> _allCountryCodes = [
     {'code': '+93', 'country': 'Afghanistan'},
     {'code': '+355', 'country': 'Albania'},
@@ -454,6 +296,11 @@ class _SignUpScreenState extends State<SignUpScreen>
 
     _initializeAnimations();
     _initializeRecognizers();
+    _initializeApi();
+  }
+
+  Future<void> _initializeApi() async {
+    await _api.init();
   }
 
   void _initializeAnimations() {
@@ -592,7 +439,7 @@ class _SignUpScreenState extends State<SignUpScreen>
     });
   }
 
-  void _handleSignUp() async {
+  Future<void> _handleSignUp() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -604,42 +451,38 @@ class _SignUpScreenState extends State<SignUpScreen>
 
     setState(() => _isLoading = true);
 
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final response = await _api.guestRegister({
+        'full_name': _fullNameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'nationality': _selectedNationality,
+        'country_code': _selectedCountryCode,
+        'phone': _phoneController.text.trim(),
+        'password': _passwordController.text.trim(),
+        'confirm_password': _confirmPasswordController.text.trim(),
+      });
 
-    setState(() => _isLoading = false);
+      if (!mounted) return;
 
-    if (mounted) {
-      SnackbarHelper.showSuccess(
-          context, 'OTP sent to ${_emailController.text}');
+      if (response['success'] == true) {
+        SnackbarHelper.showSuccess(
+            context, 'Account created successfully! Please login.');
 
-      Navigator.of(context).push(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              OtpVerificationScreen(
-            email: _emailController.text,
-            userData: {
-              'fullName': _fullNameController.text,
-              'email': _emailController.text,
-              'phone': _phoneController.text,
-              'nationality': _selectedNationality,
-              'countryCode': _selectedCountryCode,
-              'role': 'guest',
-            },
-          ),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            const begin = Offset(1.0, 0.0);
-            const end = Offset.zero;
-            const curve = Curves.easeInOutCubic;
-            var tween = Tween(begin: begin, end: end)
-                .chain(CurveTween(curve: curve));
-            var offsetAnimation = animation.drive(tween);
-            return SlideTransition(
-              position: offsetAnimation,
-              child: child,
-            );
-          },
-        ),
-      );
+        await Future.delayed(const Duration(seconds: 1));
+        
+        if (mounted) {
+          _navigateBackToLogin();
+        }
+      } else {
+        SnackbarHelper.showError(context, response['message'] ?? 'Registration failed');
+      }
+    } catch (e) {
+      print('Sign up error: $e');
+      SnackbarHelper.showError(context, 'An error occurred. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -711,7 +554,6 @@ class _SignUpScreenState extends State<SignUpScreen>
     );
   }
 
-  // UI Components
   Widget _buildBackButton() {
     return GestureDetector(
       onTap: _navigateBackToLogin,
@@ -955,7 +797,6 @@ class _SignUpScreenState extends State<SignUpScreen>
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Country code dropdown - using Flexible with fit loose
         Flexible(
           flex: 2,
           fit: FlexFit.loose,
@@ -1059,7 +900,6 @@ class _SignUpScreenState extends State<SignUpScreen>
           ),
         ),
         const SizedBox(width: 4),
-        // Phone number field
         Flexible(
           flex: 5,
           fit: FlexFit.loose,
@@ -1432,7 +1272,6 @@ class _SignUpScreenState extends State<SignUpScreen>
     );
   }
 
-  // Custom Dropdown Widget
   Widget _buildCustomDropdown<T>({
     required String label,
     required IconData icon,
@@ -1675,7 +1514,6 @@ class _SignUpScreenState extends State<SignUpScreen>
     );
   }
 
-  // Text Field Widget
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -1770,7 +1608,6 @@ class _SignUpScreenState extends State<SignUpScreen>
   }
 }
 
-/// Small pulsing status dot used in the Guest badge.
 class _PulsingDot extends StatefulWidget {
   const _PulsingDot();
 

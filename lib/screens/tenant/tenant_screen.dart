@@ -1,10 +1,10 @@
-// lib/screens/tenant/tenant_screen.dart
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../services/notification_service.dart';
+import '../../services/api_service.dart';
 import 'home_screen.dart';
 import 'payments_screen.dart';
 import 'maintenance_screen.dart';
@@ -28,6 +28,7 @@ class TenantScreenState extends State<TenantScreen> {
   late final PageController _pageController;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final NotificationService _notificationService = NotificationService();
+  final ApiService _api = ApiService();
   int _unreadCount = 0;
 
   static const List<Widget> _screens = [
@@ -131,15 +132,26 @@ class TenantScreenState extends State<TenantScreen> {
               icon: Icons.switch_account_rounded,
               color: const Color(0xFFFF9800),
               label: 'Enter as Guest',
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const GuestScreen()),
-                );
-                SnackbarHelper.showSuccess(context, 'Switched to Guest mode');
+                try {
+                  // ============================================================
+                  // FIXED: Proper role switching with token management
+                  // ============================================================
+                  final success = await _api.switchToRole('guest');
+                  if (success) {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const GuestScreen()),
+                    );
+                    SnackbarHelper.showSuccess(context, 'Switched to Guest mode');
+                  } else {
+                    SnackbarHelper.showError(context, 'Failed to switch to guest');
+                  }
+                } catch (e) {
+                  SnackbarHelper.showError(context, 'Error switching to guest');
+                }
               },
             ),
-            const SizedBox(height: 10),
             _buildQuickActionItem(
               icon: Icons.logout_rounded,
               color: Colors.red,
@@ -255,8 +267,9 @@ class TenantScreenState extends State<TenantScreen> {
             ),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
+              await _api.clearToken();
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
               );

@@ -1,8 +1,10 @@
+// lib/screens/auth/forgot_password_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import '../../widgets/livinkey_logo.dart';
+import 'package:livinkey/models/auth_models.dart';
+
+import '../../services/api_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../widgets/common/snackbar_helper.dart';
@@ -27,6 +29,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   String _email = '';
+  String? _resetToken;
 
   late AnimationController _fadeController;
   late AnimationController _slideController;
@@ -35,6 +38,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   late Animation<double> _scaleAnimation;
 
   late final TapGestureRecognizer _backToLoginRecognizer;
+
+  final ApiService _api = ApiService();
+  bool _isTenantLogin = true;
 
   @override
   void initState() {
@@ -75,6 +81,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
       _fadeController.forward();
       _slideController.forward();
     });
+
+    _initializeApi();
+  }
+
+  Future<void> _initializeApi() async {
+    await _api.init();
   }
 
   @override
@@ -137,7 +149,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     return emailRegex.hasMatch(email);
   }
 
-  void _handleSendOTP() async {
+  Future<void> _handleSendOTP() async {
     final String email = _emailController.text.trim();
 
     if (email.isEmpty) {
@@ -155,17 +167,34 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
       _email = email;
     });
 
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      Map<String, dynamic> response;
 
-    setState(() => _isLoading = false);
+      if (_isTenantLogin) {
+        response = await _api.tenantForgotPassword(email);
+      } else {
+        response = await _api.guestForgotPassword(email);
+      }
 
-    if (mounted) {
-      SnackbarHelper.showSuccess(context, 'OTP sent to $email');
-      _nextStep();
+      if (!mounted) return;
+
+      if (response['success'] == true) {
+        SnackbarHelper.showSuccess(context, 'OTP sent to $email');
+        _nextStep();
+      } else {
+        SnackbarHelper.showError(context, response['message'] ?? 'Failed to send OTP');
+      }
+    } catch (e) {
+      print('Send OTP error: $e');
+      SnackbarHelper.showError(context, 'An error occurred. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  void _handleResendOTP() async {
+  Future<void> _handleResendOTP() async {
     if (_email.isEmpty) {
       SnackbarHelper.showError(context, 'Email not found. Please go back.');
       return;
@@ -173,16 +202,33 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
     setState(() => _isLoading = true);
 
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      Map<String, dynamic> response;
 
-    setState(() => _isLoading = false);
+      if (_isTenantLogin) {
+        response = await _api.tenantForgotPassword(_email);
+      } else {
+        response = await _api.guestForgotPassword(_email);
+      }
 
-    if (mounted) {
-      SnackbarHelper.showSuccess(context, 'OTP resent to $_email');
+      if (!mounted) return;
+
+      if (response['success'] == true) {
+        SnackbarHelper.showSuccess(context, 'OTP resent to $_email');
+      } else {
+        SnackbarHelper.showError(context, response['message'] ?? 'Failed to resend OTP');
+      }
+    } catch (e) {
+      print('Resend OTP error: $e');
+      SnackbarHelper.showError(context, 'An error occurred. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  void _handleVerifyOTP() async {
+  Future<void> _handleVerifyOTP() async {
     final String otp = _otpController.text.trim();
 
     if (otp.isEmpty) {
@@ -197,17 +243,35 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
     setState(() => _isLoading = true);
 
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      OtpResponse response;
 
-    setState(() => _isLoading = false);
+      if (_isTenantLogin) {
+        response = await _api.tenantVerifyOTP(_email, otp);
+      } else {
+        response = await _api.guestVerifyOTP(_email, otp);
+      }
 
-    if (mounted) {
-      SnackbarHelper.showSuccess(context, 'OTP verified successfully!');
-      _nextStep();
+      if (!mounted) return;
+
+      if (response.success) {
+        _resetToken = response.resetToken;
+        SnackbarHelper.showSuccess(context, 'OTP verified successfully!');
+        _nextStep();
+      } else {
+        SnackbarHelper.showError(context, response.message);
+      }
+    } catch (e) {
+      print('Verify OTP error: $e');
+      SnackbarHelper.showError(context, 'An error occurred. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  void _handleResetPassword() async {
+  Future<void> _handleResetPassword() async {
     final String newPassword = _newPasswordController.text.trim();
     final String confirmPassword = _confirmPasswordController.text.trim();
 
@@ -231,18 +295,40 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
       return;
     }
 
+    if (_resetToken == null) {
+      SnackbarHelper.showError(context, 'Reset token not found. Please verify OTP again.');
+      return;
+    }
+
     setState(() => _isLoading = true);
 
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      Map<String, dynamic> response;
 
-    setState(() => _isLoading = false);
+      if (_isTenantLogin) {
+        response = await _api.tenantResetPassword(_resetToken!, newPassword, confirmPassword);
+      } else {
+        response = await _api.guestResetPassword(_resetToken!, newPassword, confirmPassword);
+      }
 
-    if (mounted) {
-      SnackbarHelper.showSuccess(context, 'Password reset successful!');
-      
-      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
+
+      if (response['success'] == true) {
+        SnackbarHelper.showSuccess(context, 'Password reset successful!');
+
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) {
+          _navigateBackToLogin();
+        }
+      } else {
+        SnackbarHelper.showError(context, response['message'] ?? 'Failed to reset password');
+      }
+    } catch (e) {
+      print('Reset password error: $e');
+      SnackbarHelper.showError(context, 'An error occurred. Please try again.');
+    } finally {
       if (mounted) {
-        _navigateBackToLogin();
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -335,10 +421,93 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                             ),
                           ),
 
-                          const SizedBox(height: 32),
+                          const SizedBox(height: 20),
+
+                          // Role toggle
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.06),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.08),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      if (!_isTenantLogin) {
+                                        setState(() => _isTenantLogin = true);
+                                        hapticFeedback();
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _isTenantLogin
+                                            ? const Color(0xFF92C24A)
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        'Tenant',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: _isTenantLogin
+                                              ? Colors.black
+                                              : Colors.white.withOpacity(0.5),
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      if (_isTenantLogin) {
+                                        setState(() => _isTenantLogin = false);
+                                        hapticFeedback();
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _isTenantLogin
+                                            ? Colors.transparent
+                                            : const Color(0xFFFF9800),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        'Guest',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: _isTenantLogin
+                                              ? Colors.white.withOpacity(0.5)
+                                              : Colors.black,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
 
                           _buildProgressIndicator(),
-                          const SizedBox(height: 32),
+                          const SizedBox(height: 24),
 
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
@@ -346,8 +515,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                               Container(
                                 padding: const EdgeInsets.all(11),
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFF92C24A), Color(0xFF66BB6A)],
+                                  gradient: LinearGradient(
+                                    colors: [const Color(0xFF92C24A), const Color(0xFF66BB6A)],
                                   ),
                                   borderRadius: BorderRadius.circular(14),
                                   boxShadow: [
@@ -460,7 +629,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
       children: List.generate(3, (index) {
         bool isActive = index <= _currentStep;
         bool isCurrent = index == _currentStep;
-        
+
         return Expanded(
           child: Column(
             children: [
@@ -786,9 +955,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           ),
         ),
         const SizedBox(height: 32),
+        // FIXED: Use MainAxisAlignment.spaceEvenly with smaller spacer
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Expanded(
+            Flexible(
+              flex: 1,
               child: _buildActionButton(
                 onPressed: _previousStep,
                 label: 'Back',
@@ -797,8 +969,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                 isOutlined: true,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
+            const SizedBox(width: 8),
+            Flexible(
+              flex: 1,
               child: _buildActionButton(
                 onPressed: _handleVerifyOTP,
                 label: 'Verify',
@@ -982,9 +1155,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           ),
         ),
         const SizedBox(height: 24),
+        // FIXED: Use MainAxisAlignment.spaceEvenly with smaller spacer
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            Expanded(
+            Flexible(
+              flex: 1,
               child: _buildActionButton(
                 onPressed: _previousStep,
                 label: 'Back',
@@ -993,8 +1169,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                 isOutlined: true,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
+            const SizedBox(width: 8),
+            Flexible(
+              flex: 1,
               child: _buildActionButton(
                 onPressed: _handleResetPassword,
                 label: 'Reset Password',
@@ -1017,26 +1194,26 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   }) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      height: 56,
+      height: 52, // Reduced from 56 to save space
       decoration: isOutlined
           ? BoxDecoration(
               color: Colors.white.withOpacity(0.03),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(14),
             )
           : BoxDecoration(
               gradient: const LinearGradient(
                 colors: [Color(0xFF92C24A), Color(0xFF4CAF50)],
               ),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
                   color: const Color(0xFF92C24A).withOpacity(0.3),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
                 ),
                 BoxShadow(
                   color: const Color(0xFF92C24A).withOpacity(0.1),
-                  blurRadius: 40,
+                  blurRadius: 30,
                   offset: const Offset(0, 4),
                 ),
               ],
@@ -1047,7 +1224,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           foregroundColor: isOutlined ? Colors.white : Colors.black,
           shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(14),
           ),
           side: isOutlined
               ? BorderSide(
@@ -1056,12 +1233,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                 )
               : BorderSide.none,
           elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
         ),
         onPressed: isLoading ? null : onPressed,
         child: isLoading
             ? SizedBox(
-                height: 24,
-                width: 24,
+                height: 22,
+                width: 22,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.5,
                   valueColor: AlwaysStoppedAnimation<Color>(
@@ -1075,16 +1253,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                   Icon(
                     icon,
                     color: isOutlined ? Colors.white : Colors.black,
-                    size: 20,
+                    size: 18,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Text(
                     label,
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                       color: isOutlined ? Colors.white : Colors.black,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.3,
                     ),
                   ),
                 ],

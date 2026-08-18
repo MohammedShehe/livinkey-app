@@ -1,41 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:livinkey/screens/tenant/tenant_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../utils/constants.dart';
-import '../../utils/theme.dart';
+import '../../utils/helpers.dart';
 import '../../widgets/common/snackbar_helper.dart';
+import '../auth/login_screen.dart';
+import '../guest/guest_screen.dart';
 
 class TenantDrawer extends StatelessWidget {
   const TenantDrawer({super.key});
 
-  // Helper method to get responsive logo size for drawer
   double _getLogoSize(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
     final double screenHeight = MediaQuery.of(context).size.height;
-    
-    // Use the smaller dimension to ensure it fits
     final double minDimension = screenWidth < screenHeight ? screenWidth : screenHeight;
-    
-    // For tablets (width >= 600), use larger size
+
     if (screenWidth >= 600) {
-      return minDimension * 0.25; // 25% of screen width for tablets
-    }
-    // For large phones
-    else if (screenWidth >= 400) {
-      return minDimension * 0.20; // 20% of screen width for large phones
-    }
-    // For small phones
-    else {
-      return minDimension * 0.18; // 18% of screen width for small phones
+      return minDimension * 0.25;
+    } else if (screenWidth >= 400) {
+      return minDimension * 0.20;
+    } else {
+      return minDimension * 0.18;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Get responsive logo size
     final double logoSize = _getLogoSize(context);
-    
+
     return Drawer(
       backgroundColor: kLivinkeyBlack,
       child: SafeArea(
@@ -46,45 +41,89 @@ class TenantDrawer extends StatelessWidget {
               child: Column(
                 children: [
                   _buildDrawerItem(
+                    icon: Icons.home_rounded,
+                    title: 'Home',
+                    onTap: () => Navigator.pop(context),
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.payment_rounded,
+                    title: 'Payments',
+                    onTap: () {
+                      Navigator.pop(context);
+                      final state = context.findAncestorStateOfType<TenantScreenState>();
+                      state?.navigateToTab(1);
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.build_rounded,
+                    title: 'Maintenance',
+                    onTap: () {
+                      Navigator.pop(context);
+                      final state = context.findAncestorStateOfType<TenantScreenState>();
+                      state?.navigateToTab(2);
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.folder_rounded,
+                    title: 'Documents',
+                    onTap: () {
+                      Navigator.pop(context);
+                      final state = context.findAncestorStateOfType<TenantScreenState>();
+                      state?.navigateToTab(3);
+                    },
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.person_rounded,
+                    title: 'Profile',
+                    onTap: () {
+                      Navigator.pop(context);
+                      final state = context.findAncestorStateOfType<TenantScreenState>();
+                      state?.navigateToTab(4);
+                    },
+                  ),
+                  const Divider(color: Colors.white24, height: 24),
+                  _buildDrawerItem(
+                    icon: Icons.switch_account_rounded,
+                    title: 'Switch to Guest',
+                    color: const Color(0xFFFF9800),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(builder: (_) => const GuestScreen()),
+                      );
+                      SnackbarHelper.showSuccess(context, 'Switched to Guest mode');
+                    },
+                  ),
+                  _buildDrawerItem(
                     icon: Icons.description_rounded,
                     title: 'Terms of Service',
-                    onTap: () {
-                      SnackbarHelper.show(context, 'Terms of Service');
-                    },
+                    onTap: () => SnackbarHelper.show(context, 'Terms of Service'),
                   ),
                   _buildDrawerItem(
                     icon: Icons.privacy_tip_rounded,
                     title: 'Privacy Policy',
-                    onTap: () {
-                      SnackbarHelper.show(context, 'Privacy Policy');
-                    },
+                    onTap: () => SnackbarHelper.show(context, 'Privacy Policy'),
                   ),
                   _buildDrawerItem(
                     icon: Icons.support_agent_rounded,
                     title: 'Support',
-                    onTap: () {
-                      _showSupportOptions(context);
-                    },
+                    onTap: () => _showSupportOptions(context),
+                  ),
+                  _buildDrawerItem(
+                    icon: Icons.logout_rounded,
+                    title: 'Logout',
+                    color: Colors.red,
+                    onTap: () => _handleLogout(context),
                   ),
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                          color: Colors.white.withOpacity(0.05),
-                          width: 1,
-                        ),
-                      ),
+                      border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
                     ),
                     child: const Text(
                       'A COMPLETE HOME',
-                      style: TextStyle(
-                        color: kLivinkeyGreen,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 2,
-                      ),
+                      style: TextStyle(color: kLivinkeyGreen, fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 2),
                     ),
                   ),
                 ],
@@ -103,24 +142,12 @@ class TenantDrawer extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            kLivinkeyGreen.withOpacity(0.15),
-            Colors.transparent,
-          ],
+          colors: [kLivinkeyGreen.withOpacity(0.15), Colors.transparent],
         ),
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withOpacity(0.05),
-            width: 1,
-          ),
-        ),
+        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
       ),
       child: Center(
-        child: Image.asset(
-          kGeneralLogo,
-          height: logoSize,
-          width: logoSize,
-        ),
+        child: Image.asset(kGeneralLogo, height: logoSize, width: logoSize),
       ),
     );
   }
@@ -129,26 +156,20 @@ class TenantDrawer extends StatelessWidget {
     required IconData icon,
     required String title,
     required VoidCallback onTap,
+    Color? color,
   }) {
+    final iconColor = color ?? Colors.white.withOpacity(0.6);
     return ListTile(
-      leading: Icon(
-        icon,
-        color: Colors.white.withOpacity(0.6),
-        size: 22,
-      ),
+      leading: Icon(icon, color: iconColor, size: 22),
       title: Text(
         title,
         style: TextStyle(
-          color: Colors.white.withOpacity(0.8),
+          color: color ?? Colors.white.withOpacity(0.8),
           fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
       ),
-      trailing: Icon(
-        Icons.chevron_right_rounded,
-        color: Colors.white.withOpacity(0.2),
-        size: 20,
-      ),
+      trailing: Icon(Icons.chevron_right_rounded, color: Colors.white.withOpacity(0.2), size: 20),
       onTap: onTap,
       hoverColor: kLivinkeyGreen.withOpacity(0.05),
       splashColor: kLivinkeyGreen.withOpacity(0.1),
@@ -159,10 +180,8 @@ class TenantDrawer extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: kLivinkeyBlack,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (BuildContext context) => Container(
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => Container(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -176,14 +195,7 @@ class TenantDrawer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'Contact Support',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            const Text('Contact Support', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
             const SizedBox(height: 20),
             _buildSupportOption(
               icon: FontAwesomeIcons.whatsapp,
@@ -231,16 +243,10 @@ class TenantDrawer extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              color.withOpacity(0.1),
-              Colors.transparent,
-            ],
+            colors: [color.withOpacity(0.1), Colors.transparent],
           ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: color.withOpacity(0.15),
-            width: 1,
-          ),
+          border: Border.all(color: color.withOpacity(0.15)),
         ),
         child: Row(
           children: [
@@ -257,66 +263,33 @@ class TenantDrawer extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.5),
-                      fontSize: 13,
-                    ),
-                  ),
+                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                  Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13)),
                 ],
               ),
             ),
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              color: Colors.white.withOpacity(0.2),
-              size: 16,
-            ),
+            Icon(Icons.arrow_forward_ios_rounded, color: Colors.white.withOpacity(0.2), size: 16),
           ],
         ),
       ),
     );
   }
 
-  // Method to handle regular URLs (WhatsApp, Instagram, etc).
-  // Note: we deliberately do NOT gate this on canLaunchUrl(). On Android 11+
-  // canLaunchUrl() can return a false negative for implicit intents (like
-  // mailto: or wa.me links) unless the querying app's package visibility is
-  // declared — see the <queries> note below. Attempting the launch directly
-  // and catching failures is more reliable in practice.
   Future<void> _launchUrl(BuildContext context, String url) async {
     try {
       final Uri uri = Uri.parse(url);
-      final bool launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (!launched && context.mounted) {
-        _showUnableToOpenSnackbar(context, url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
     } catch (_) {
       if (context.mounted) {
-        _showUnableToOpenSnackbar(context, url);
+        SnackbarHelper.showError(context, 'Unable to open link');
       }
     }
   }
 
-  // Dedicated method for launching email with layered fallbacks so the
-  // support option always resolves to *something* useful for the user.
   Future<void> _launchEmail(BuildContext context) async {
     const String email = 'livinkey@gmail.com';
-
-    // Try progressively simpler mailto URIs. Some mail apps / OEM Android
-    // builds fail to resolve a mailto: URI that includes query parameters,
-    // so we fall back to a bare address if the richer one fails.
     final List<Uri> attempts = [
       Uri(scheme: 'mailto', path: email, query: 'subject=Support%20Inquiry'),
       Uri(scheme: 'mailto', path: email),
@@ -324,18 +297,10 @@ class TenantDrawer extends StatelessWidget {
 
     for (final uri in attempts) {
       try {
-        final bool launched = await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
-        if (launched) return;
-      } catch (_) {
-        // Try the next, simpler URI.
-      }
+        if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+      } catch (_) {}
     }
 
-    // No mail app could handle it (or none is installed) — copy the address
-    // so the user can still reach support instead of hitting a dead end.
     await Clipboard.setData(const ClipboardData(text: email));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -349,13 +314,49 @@ class TenantDrawer extends StatelessWidget {
     }
   }
 
-  void _showUnableToOpenSnackbar(BuildContext context, String url) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Unable to open: $url'),
-        backgroundColor: Colors.black87,
-        duration: const Duration(seconds: 4),
-        behavior: SnackBarBehavior.floating,
+  void _handleLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161616),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: Colors.white.withOpacity(0.08)),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.logout_rounded, color: Colors.red, size: 18),
+            ),
+            const SizedBox(width: 12),
+            const Text('Logout', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to logout?',
+          style: TextStyle(color: Colors.white.withOpacity(0.6)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+              SnackbarHelper.showSuccess(context, 'Logged out successfully');
+            },
+            child: const Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
+          ),
+        ],
       ),
     );
   }

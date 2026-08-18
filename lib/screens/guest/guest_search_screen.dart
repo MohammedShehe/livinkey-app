@@ -1,11 +1,13 @@
-// lib/screens/guest/guest_search_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
+import '../../services/api_service.dart';
 import '../../widgets/guest/pg_card.dart';
 import '../../widgets/guest/pg_detail_modal.dart';
 import '../../models/pg_model.dart';
+import '../../widgets/common/snackbar_helper.dart';
 import 'guest_screen.dart';
 
 class GuestSearchScreen extends StatefulWidget {
@@ -17,7 +19,6 @@ class GuestSearchScreen extends StatefulWidget {
 
 class _GuestSearchScreenState extends State<GuestSearchScreen>
     with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
-  
   @override
   bool get wantKeepAlive => true;
 
@@ -29,110 +30,12 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
   String _searchQuery = '';
   bool _isFocused = false;
   bool _isRefreshing = false;
+  bool _isLoading = true;
 
-  final List<PgModel> _allPgs = [
-    PgModel(
-      id: '1',
-      name: 'Green Valley PG',
-      location: 'Near LPU, Phagwara',
-      rating: 4.8,
-      totalRooms: 20,
-      availableRooms: 5,
-      rent: 8500,
-      status: 'Vacant',
-      imageUrl: 'assets/images/pg1.jpg',
-      amenities: ['Wi-Fi', 'AC', 'Parking', 'Security', 'Laundry', 'Gym'],
-      comments: [
-        UserComment('Rahul K.', 'Great place! Very clean and affordable.'),
-        UserComment('Priya S.', 'Good food and friendly staff.'),
-        UserComment('Amit R.', 'Nice location, close to university.'),
-      ],
-      description: 'Green Valley PG offers comfortable living spaces with modern amenities.',
-    ),
-    PgModel(
-      id: '2',
-      name: 'Sunshine PG',
-      location: 'Near Lovely Professional University',
-      rating: 4.6,
-      totalRooms: 15,
-      availableRooms: 0,
-      rent: 7500,
-      status: 'Full Occupied',
-      imageUrl: 'assets/images/pg2.jpg',
-      amenities: ['Wi-Fi', 'AC', 'Parking', 'Security', 'Food'],
-      comments: [
-        UserComment('Sneha M.', 'Good food and comfortable rooms.'),
-        UserComment('Vikram S.', 'Affordable rent, nice place.'),
-      ],
-      description: 'Sunshine PG provides quality accommodation with delicious home-cooked meals.',
-    ),
-    PgModel(
-      id: '3',
-      name: 'Royal PG',
-      location: 'Phagwara, Punjab',
-      rating: 4.9,
-      totalRooms: 25,
-      availableRooms: 8,
-      rent: 9500,
-      status: 'Vacant',
-      imageUrl: 'assets/images/pg3.jpg',
-      amenities: ['Wi-Fi', 'AC', 'Parking', 'Security', 'Laundry', 'Gym', 'Swimming Pool'],
-      comments: [
-        UserComment('Arjun P.', 'Best PG in town! Highly recommended.'),
-        UserComment('Neha G.', 'Amazing amenities and service.'),
-        UserComment('Rohit K.', 'Great place for students.'),
-      ],
-      description: 'Royal PG offers premium accommodation with world-class amenities.',
-    ),
-    PgModel(
-      id: '4',
-      name: 'Cozy Nest PG',
-      location: 'Near LPU Gate 1',
-      rating: 4.3,
-      totalRooms: 12,
-      availableRooms: 2,
-      rent: 6800,
-      status: 'Vacant',
-      imageUrl: 'assets/images/pg4.jpg',
-      amenities: ['Wi-Fi', 'Parking', 'Security', 'Food'],
-      comments: [
-        UserComment('Deepak K.', 'Budget-friendly PG with good facilities.'),
-      ],
-      description: 'Cozy Nest PG provides affordable accommodation with all essential amenities.',
-    ),
-    PgModel(
-      id: '5',
-      name: 'Elite PG',
-      location: 'Phagwara City Center',
-      rating: 4.7,
-      totalRooms: 30,
-      availableRooms: 0,
-      rent: 10000,
-      status: 'Full Occupied',
-      imageUrl: 'assets/images/pg5.jpg',
-      amenities: ['Wi-Fi', 'AC', 'Parking', 'Security', 'Laundry', 'Gym', 'Swimming Pool', 'Restaurant'],
-      comments: [
-        UserComment('Ananya R.', 'Luxury living at affordable prices.'),
-        UserComment('Karan S.', 'Excellent facilities and service.'),
-        UserComment('Meera D.', 'Best PG in Phagwara!'),
-      ],
-      description: 'Elite PG offers luxury accommodation with premium amenities.',
-    ),
-  ];
+  final ApiService _api = ApiService();
 
-  List<PgModel> get _searchResults {
-    if (_searchQuery.isEmpty) return _allPgs;
-    
-    final query = _searchQuery.toLowerCase();
-    return _allPgs.where((pg) {
-      return pg.name.toLowerCase().contains(query) ||
-          pg.location.toLowerCase().contains(query) ||
-          pg.status.toLowerCase().contains(query) ||
-          pg.rent.toString().contains(query) ||
-          pg.amenities.any((a) => a.toLowerCase().contains(query)) ||
-          pg.comments.any((c) => c.text.toLowerCase().contains(query));
-    }).toList();
-  }
+  List<PgModel> _allPgs = [];
+  List<PgModel> _searchResults = [];
 
   @override
   void initState() {
@@ -155,7 +58,10 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
         _isFocused = _searchFocusNode.hasFocus;
       });
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _fadeController.forward());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fadeController.forward();
+      _loadPGs();
+    });
   }
 
   @override
@@ -166,22 +72,54 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
     super.dispose();
   }
 
-  // Helper method to open drawer using the parent state
+  Future<void> _loadPGs({String? search}) async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await _api.getPublicPGs(search: search);
+      if (response['success'] && response['data'] != null) {
+        final data = response['data'] as List;
+        _allPgs = data.map((pg) => PgModel.fromJson(pg)).toList();
+        _searchResults = _allPgs;
+      } else {
+        SnackbarHelper.showError(context, response['message'] ?? 'Failed to load PGs');
+      }
+    } catch (e) {
+      SnackbarHelper.showError(context, 'Failed to load PGs');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   void _openDrawer() {
     final state = context.findAncestorStateOfType<GuestScreenState>();
-    if (state != null) {
-      state.openDrawer();
-    } else {
-      Scaffold.of(context).openDrawer();
-    }
+    state?.openDrawer();
   }
 
   Future<void> _handleRefresh() async {
     setState(() => _isRefreshing = true);
-    await Future.delayed(const Duration(seconds: 1));
+    await _loadPGs(search: _searchQuery.isNotEmpty ? _searchQuery : null);
     if (mounted) {
       setState(() => _isRefreshing = false);
     }
+  }
+
+  void _performSearch(String query) {
+    setState(() {
+      _searchQuery = query;
+      if (query.isEmpty) {
+        _searchResults = _allPgs;
+      } else {
+        final q = query.toLowerCase();
+        _searchResults = _allPgs.where((pg) {
+          return pg.name.toLowerCase().contains(q) ||
+              pg.location.toLowerCase().contains(q) ||
+              pg.amenityNames.any((a) => a.toLowerCase().contains(q)) ||
+              pg.rent.toString().contains(q);
+        }).toList();
+      }
+    });
   }
 
   void _showPgDetail(PgModel pg) {
@@ -197,9 +135,25 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    
+
     final double bottomNavHeight = 76.0;
     final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: kLivinkeyBlack,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(kLivinkeyGreen)),
+              const SizedBox(height: 16),
+              Text('Loading PGs...', style: TextStyle(color: Colors.white.withOpacity(0.5))),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: kLivinkeyBlack,
@@ -295,51 +249,28 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: _isFocused
-                            ? [
-                                kLivinkeyGreen.withOpacity(0.10),
-                                kLivinkeyGreen.withOpacity(0.03),
-                              ]
-                            : [
-                                Colors.white.withOpacity(0.05),
-                                Colors.white.withOpacity(0.02),
-                              ],
+                            ? [kLivinkeyGreen.withOpacity(0.10), kLivinkeyGreen.withOpacity(0.03)]
+                            : [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.02)],
                       ),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: _isFocused
-                            ? kLivinkeyGreen.withOpacity(0.45)
-                            : Colors.white.withOpacity(0.08),
+                        color: _isFocused ? kLivinkeyGreen.withOpacity(0.45) : Colors.white.withOpacity(0.08),
                         width: _isFocused ? 1.5 : 1,
                       ),
                       boxShadow: _isFocused
-                          ? [
-                              BoxShadow(
-                                color: kLivinkeyGreen.withOpacity(0.12),
-                                blurRadius: 18,
-                                offset: const Offset(0, 6),
-                              ),
-                            ]
+                          ? [BoxShadow(color: kLivinkeyGreen.withOpacity(0.12), blurRadius: 18, offset: const Offset(0, 6))]
                           : [],
                     ),
                     child: TextField(
                       controller: _searchController,
                       focusNode: _searchFocusNode,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
                       decoration: InputDecoration(
                         hintText: 'Search by name, location, rent, amenities...',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withOpacity(0.3),
-                          fontSize: 13.5,
-                        ),
+                        hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 13.5),
                         prefixIcon: Icon(
                           Icons.search_rounded,
-                          color: _isFocused
-                              ? kLivinkeyGreen
-                              : kLivinkeyGreen.withOpacity(0.6),
+                          color: _isFocused ? kLivinkeyGreen : kLivinkeyGreen.withOpacity(0.6),
                           size: 22,
                         ),
                         suffixIcon: _searchQuery.isNotEmpty
@@ -361,6 +292,7 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
                                     _searchController.clear();
                                     _searchQuery = '';
                                   });
+                                  _performSearch('');
                                   HapticFeedback.selectionClick();
                                 },
                               )
@@ -377,16 +309,11 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
                           borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 14,
-                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                         isDense: true,
                       ),
                       onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value;
-                        });
+                        _performSearch(value);
                       },
                     ),
                   ),
@@ -411,7 +338,6 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
                           color: Colors.white.withOpacity(0.45),
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
-                          letterSpacing: 0.1,
                         ),
                       ),
                     ],
@@ -422,12 +348,7 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
 
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      0,
-                      20,
-                      bottomNavHeight + bottomSafeArea + 16,
-                    ),
+                    padding: EdgeInsets.fromLTRB(20, 0, 20, bottomNavHeight + bottomSafeArea + 16),
                     child: _searchResults.isEmpty
                         ? Center(
                             child: Column(
@@ -448,27 +369,18 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
                                 const SizedBox(height: 16),
                                 Text(
                                   'No PGs found',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.4),
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                  style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 15, fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   'Try adjusting your search',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.2),
-                                    fontSize: 12.5,
-                                  ),
+                                  style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 12.5),
                                 ),
                               ],
                             ),
                           )
                         : GridView.builder(
-                            physics: const BouncingScrollPhysics(
-                              parent: AlwaysScrollableScrollPhysics(),
-                            ),
+                            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                             padding: const EdgeInsets.only(bottom: 20),
                             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: 2,
@@ -516,8 +428,7 @@ class _PulsingDot extends StatefulWidget {
   State<_PulsingDot> createState() => _PulsingDotState();
 }
 
-class _PulsingDotState extends State<_PulsingDot>
-    with SingleTickerProviderStateMixin {
+class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1400),

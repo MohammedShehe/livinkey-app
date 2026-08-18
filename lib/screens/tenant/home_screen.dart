@@ -1,13 +1,15 @@
-// lib/screens/tenant/home_screen.dart
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
+import '../../services/api_service.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/tenant/stat_card.dart';
 import '../../widgets/tenant/quick_action.dart';
 import '../../widgets/common/snackbar_helper.dart';
-import 'tenant_screen.dart';
-import '../../services/notification_service.dart';
 import '../common/notification_screen.dart';
+import 'tenant_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,6 +27,35 @@ class _HomeScreenState extends State<HomeScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   bool _isRefreshing = false;
+  bool _isLoading = true;
+
+  final ApiService _api = ApiService();
+
+  // Home data
+  String _greeting = '';
+  String _tenantName = '';
+  String _email = '';
+  String _pgName = '';
+  String _roomNumber = '';
+  String? _profilePicture;
+  String _placeholderInitials = '';
+
+  // Rent status
+  String _rentStatus = 'unpaid';
+  int _dueDays = 0;
+  String? _nextPaymentDate;
+  int _daysLeft = 0;
+  String? _paidFrom;
+  String? _paidTill;
+
+  // Current bill
+  Map<String, dynamic>? _currentBill;
+
+  // Maintenance stats
+  int _maintenanceTotal = 0;
+  int _maintenancePending = 0;
+  int _maintenanceInProgress = 0;
+  int _maintenanceCompleted = 0;
 
   @override
   void initState() {
@@ -42,7 +73,10 @@ class _HomeScreenState extends State<HomeScreen>
     ).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOutCubic),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _fadeController.forward());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fadeController.forward();
+      _loadHomeData();
+    });
   }
 
   @override
@@ -51,12 +85,56 @@ class _HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
+  Future<void> _loadHomeData() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await _api.getTenantHome();
+      if (response['success'] && response['data'] != null) {
+        final data = response['data'];
+        _greeting = data['greeting'] ?? '';
+        _tenantName = data['tenant']?['full_name'] ?? '';
+        _email = data['tenant']?['email'] ?? '';
+        _pgName = data['tenant']?['pg_name'] ?? 'Not Assigned';
+        _roomNumber = data['tenant']?['room_number'] ?? 'Not Assigned';
+        _profilePicture = data['tenant']?['profile_picture'];
+        _placeholderInitials = data['tenant']?['placeholder_initials'] ?? '';
+
+        // Rent status
+        final rentStatus = data['rent_status'] ?? {};
+        _rentStatus = rentStatus['status'] ?? 'unpaid';
+        _dueDays = rentStatus['due_days'] ?? 0;
+        _nextPaymentDate = rentStatus['next_payment_date'];
+        _daysLeft = rentStatus['days_left'] ?? 0;
+        _paidFrom = rentStatus['paid_from'];
+        _paidTill = rentStatus['paid_till'];
+
+        // Current bill
+        _currentBill = data['current_bill'];
+
+        // Maintenance stats
+        final maintenance = data['maintenance'] ?? {};
+        _maintenanceTotal = maintenance['total'] ?? 0;
+        _maintenancePending = maintenance['pending'] ?? 0;
+        _maintenanceInProgress = maintenance['in_progress'] ?? 0;
+        _maintenanceCompleted = maintenance['completed'] ?? 0;
+
+        // Update notification service
+        await NotificationService().refresh(isTenant: true);
+      }
+    } catch (e) {
+      SnackbarHelper.showError(context, 'Failed to load dashboard data');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   void _navigateToTab(int index) {
     final state = context.findAncestorStateOfType<TenantScreenState>();
     state?.navigateToTab(index);
   }
 
-  // Helper method to open drawer using the parent state
   void _openDrawer() {
     final state = context.findAncestorStateOfType<TenantScreenState>();
     if (state != null) {
@@ -68,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _handleRefresh() async {
     setState(() => _isRefreshing = true);
-    await Future.delayed(const Duration(seconds: 1));
+    await _loadHomeData();
     if (mounted) {
       setState(() => _isRefreshing = false);
       SnackbarHelper.showSuccess(context, 'Dashboard refreshed');
@@ -86,448 +164,411 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  Future<bool> _onWillPop() async {
-    return await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            backgroundColor: const Color(0xFF141414),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: BorderSide(
-                color: Colors.white.withOpacity(0.06),
-                width: 1,
-              ),
-            ),
-            title: const Text(
-              'Exit App?',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            content: Text(
-              'Are you sure you want to exit the app?',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.65),
-                fontSize: 15,
-                height: 1.4,
-              ),
-            ),
-            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: Ink(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [kLivinkeyGreen, Color(0xFF7CB342)],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: kLivinkeyGreen.withOpacity(0.35),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    child: const Text(
-                      'Exit',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ) ??
-        false;
+  String _formatRentStatus() {
+    if (_rentStatus == 'paid') {
+      return 'Paid ✓';
+    } else if (_rentStatus == 'unpaid') {
+      return 'Unpaid ⚠️';
+    }
+    return _rentStatus;
+  }
+
+  String _getRentStatusSubtitle() {
+    if (_rentStatus == 'paid') {
+      return 'Paid till ${_paidTill ?? 'N/A'}';
+    } else {
+      return 'Overdue by $_dueDays days';
+    }
+  }
+
+  Color _getRentStatusColor() {
+    return _rentStatus == 'paid' ? Colors.green : Colors.red;
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
 
-    const tenantName = 'John Doe';
-    const pgName = 'Green Valley PG';
-    const roomNumber = 'Room 204';
-
     final double logoSize = _getLogoSize(context);
     final bool isWide = MediaQuery.of(context).size.width >= 600;
-    
+
     final double bottomNavHeight = 76.0;
     final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
-    return WillPopScope(
-      onWillPop: _onWillPop,
-      child: Scaffold(
+    if (_isLoading) {
+      return Scaffold(
         backgroundColor: kLivinkeyBlack,
-        extendBodyBehindAppBar: false,
-        appBar: AppBar(
-          backgroundColor: kLivinkeyBlack,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          toolbarHeight: 80,
-          leading: IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.08)),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(kLivinkeyGreen),
               ),
-              child: const Icon(Icons.menu_rounded, color: Colors.white, size: 22),
-            ),
-            onPressed: _openDrawer,
-          ),
-          title: Image.asset(
-            kGeneralLogo,
-            height: logoSize,
-            width: logoSize,
-          ),
-          actions: [
-            // ADDED: Notification Bell Icon for Tenant
-            const _NotificationBell(),
-            Container(
-              margin: const EdgeInsets.only(right: 16),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    kLivinkeyGreen.withOpacity(0.22),
-                    kLivinkeyGreen.withOpacity(0.06),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: kLivinkeyGreen.withOpacity(0.25),
-                  width: 1,
+              const SizedBox(height: 16),
+              Text(
+                'Loading...',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.5),
+                  fontSize: 14,
                 ),
               ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.circle, color: kLivinkeyGreen, size: 7),
-                  SizedBox(width: 6),
-                  Text(
-                    'Tenant',
-                    style: TextStyle(
-                      color: kLivinkeyGreen,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-        body: RefreshIndicator(
-          onRefresh: _handleRefresh,
-          color: kLivinkeyGreen,
-          backgroundColor: kLivinkeyBlack,
-          child: DecoratedBox(
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: kLivinkeyBlack,
+      extendBodyBehindAppBar: false,
+      appBar: AppBar(
+        backgroundColor: kLivinkeyBlack,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        toolbarHeight: 80,
+        leading: IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: const Icon(Icons.menu_rounded, color: Colors.white, size: 22),
+          ),
+          onPressed: _openDrawer,
+        ),
+        title: Image.asset(
+          kGeneralLogo,
+          height: logoSize,
+          width: logoSize,
+        ),
+        actions: [
+          const _NotificationBell(),
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
                 colors: [
-                  kLivinkeyGreen.withOpacity(0.05),
-                  kLivinkeyBlack,
-                  kLivinkeyBlack,
+                  kLivinkeyGreen.withOpacity(0.22),
+                  kLivinkeyGreen.withOpacity(0.06),
                 ],
-                stops: const [0.0, 0.3, 1.0],
+              ),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: kLivinkeyGreen.withOpacity(0.25),
+                width: 1,
               ),
             ),
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SlideTransition(
-                position: _slideAnimation,
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(
-                    parent: AlwaysScrollableScrollPhysics(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.circle, color: kLivinkeyGreen, size: 7),
+                const SizedBox(width: 6),
+                const Text(
+                  'Tenant',
+                  style: TextStyle(
+                    color: kLivinkeyGreen,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
                   ),
-                  padding: EdgeInsets.fromLTRB(
-                    20,
-                    8,
-                    20,
-                    32 + bottomNavHeight + bottomSafeArea + 16,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 8),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        color: kLivinkeyGreen,
+        backgroundColor: kLivinkeyBlack,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                kLivinkeyGreen.withOpacity(0.05),
+                kLivinkeyBlack,
+                kLivinkeyBlack,
+              ],
+              stops: const [0.0, 0.3, 1.0],
+            ),
+          ),
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: SlideTransition(
+              position: _slideAnimation,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  8,
+                  20,
+                  32 + bottomNavHeight + bottomSafeArea + 16,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
 
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.035),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.06),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Good ${getTimeOfDay()}',
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.5),
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w500,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    tenantName,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 25,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: -0.3,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Wrap(
-                                    crossAxisAlignment: WrapCrossAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.home_rounded,
-                                        color: kLivinkeyGreen.withOpacity(0.8),
-                                        size: 14,
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Text(
-                                        pgName,
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.55),
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Container(
-                                        width: 3,
-                                        height: 3,
-                                        margin: const EdgeInsets.only(right: 12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.25),
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      Icon(
-                                        Icons.meeting_room_rounded,
-                                        color: kLivinkeyGreen.withOpacity(0.8),
-                                        size: 14,
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Text(
-                                        roomNumber,
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.55),
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Container(
-                              width: 56,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [kLivinkeyGreen, Color(0xFF66BB6A)],
-                                ),
-                                borderRadius: BorderRadius.circular(18),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: kLivinkeyGreen.withOpacity(0.35),
-                                    blurRadius: 16,
-                                    offset: const Offset(0, 6),
-                                  ),
-                                ],
-                              ),
-                              child: Center(
-                                child: Text(
-                                  getInitials(tenantName),
-                                  style: const TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.035),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.06),
+                          width: 1,
                         ),
                       ),
-
-                      const SizedBox(height: 28),
-
-                      Row(
+                      child: Row(
                         children: [
-                          Container(
-                            width: 4,
-                            height: 18,
-                            decoration: BoxDecoration(
-                              color: kLivinkeyGreen,
-                              borderRadius: BorderRadius.circular(2),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '$_greeting',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.5),
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _tenantName.isNotEmpty ? _tenantName : 'Tenant',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 25,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.home_rounded,
+                                      color: kLivinkeyGreen.withOpacity(0.8),
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      _pgName,
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.55),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Container(
+                                      width: 3,
+                                      height: 3,
+                                      margin: const EdgeInsets.only(right: 12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.25),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.meeting_room_rounded,
+                                      color: kLivinkeyGreen.withOpacity(0.8),
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      _roomNumber,
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.55),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Overview',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.2,
+                          const SizedBox(width: 12),
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [kLivinkeyGreen, Color(0xFF66BB6A)],
+                              ),
+                              borderRadius: BorderRadius.circular(18),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: kLivinkeyGreen.withOpacity(0.35),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                            ),
+                            child: Center(
+                              child: Text(
+                                _placeholderInitials.isNotEmpty
+                                    ? _placeholderInitials
+                                    : getInitials(_tenantName),
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
+                    ),
 
-                      GridView.count(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: isWide ? 3 : 2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: isWide ? 1.15 : 1.02,
-                        children: [
-                          StatCard(
-                            icon: Icons.warning_rounded,
-                            title: 'Rent Status',
-                            value: 'Unpaid',
-                            subtitle: 'Due in 3 days',
-                            color: Colors.red,
-                            onTap: () => _navigateToTab(1),
+                    const SizedBox(height: 28),
+
+                    Row(
+                      children: [
+                        Container(
+                          width: 4,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: kLivinkeyGreen,
+                            borderRadius: BorderRadius.circular(2),
                           ),
-                          StatCard(
-                            icon: Icons.calendar_today_rounded,
-                            title: 'Upcoming Payment',
-                            value: '14 Aug, 2026',
-                            subtitle: '3 days left',
-                            color: Colors.orange,
-                            onTap: () => _navigateToTab(1),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Overview',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
                           ),
-                          StatCard(
-                            icon: Icons.build_rounded,
-                            title: 'Maintenance',
-                            value: '5 Req',
-                            subtitle: '2 in progress',
-                            color: Colors.blue,
-                            onTap: () => _navigateToTab(2),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: isWide ? 3 : 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: isWide ? 1.15 : 1.02,
+                      children: [
+                        StatCard(
+                          icon: Icons.warning_rounded,
+                          title: 'Rent Status',
+                          value: _formatRentStatus(),
+                          subtitle: _getRentStatusSubtitle(),
+                          color: _getRentStatusColor(),
+                          onTap: () => _navigateToTab(1),
+                        ),
+                        StatCard(
+                          icon: Icons.calendar_today_rounded,
+                          title: 'Next Payment',
+                          value: _nextPaymentDate != null
+                              ? DateFormat('dd MMM, yyyy').format(DateTime.parse(_nextPaymentDate!))
+                              : 'N/A',
+                          subtitle: _daysLeft > 0 ? '$_daysLeft days left' : 'Due soon',
+                          color: _daysLeft > 3 ? Colors.orange : Colors.red,
+                          onTap: () => _navigateToTab(1),
+                        ),
+                        StatCard(
+                          icon: Icons.build_rounded,
+                          title: 'Maintenance',
+                          value: '$_maintenancePending Req',
+                          subtitle: '$_maintenanceInProgress in progress',
+                          color: Colors.blue,
+                          onTap: () => _navigateToTab(2),
+                        ),
+                        StatCard(
+                          icon: Icons.receipt_rounded,
+                          title: 'Current Bill',
+                          value: _currentBill != null
+                              ? fmtINR(_currentBill!['total_amount'] ?? 0)
+                              : 'No Bill',
+                          subtitle: _currentBill?['status'] ?? 'N/A',
+                          color: kLivinkeyGreen,
+                          onTap: () => _navigateToTab(1),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    Row(
+                      children: [
+                        Container(
+                          width: 4,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: kLivinkeyGreen,
+                            borderRadius: BorderRadius.circular(2),
                           ),
-                          StatCard(
-                            icon: Icons.receipt_rounded,
-                            title: 'Bills',
-                            value: '₹12,500',
-                            subtitle: 'This month',
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Quick Actions',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: QuickAction(
+                            icon: Icons.payment_rounded,
+                            label: 'Pay Rent',
                             color: kLivinkeyGreen,
                             onTap: () => _navigateToTab(1),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: QuickAction(
+                            icon: Icons.build_rounded,
+                            label: 'Request Maintenance',
+                            color: Colors.blue,
+                            onTap: () => _navigateToTab(2),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: QuickAction(
+                            icon: Icons.folder_rounded,
+                            label: 'View Documents',
+                            color: Colors.orange,
+                            onTap: () => _navigateToTab(3),
+                          ),
+                        ),
+                      ],
+                    ),
 
-                      const SizedBox(height: 28),
-
-                      Row(
-                        children: [
-                          Container(
-                            width: 4,
-                            height: 18,
-                            decoration: BoxDecoration(
-                              color: kLivinkeyGreen,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Quick Actions',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: QuickAction(
-                              icon: Icons.payment_rounded,
-                              label: 'Pay Rent',
-                              color: kLivinkeyGreen,
-                              onTap: () => _navigateToTab(1),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: QuickAction(
-                              icon: Icons.build_rounded,
-                              label: 'Request Maintenance',
-                              color: Colors.blue,
-                              onTap: () => _navigateToTab(2),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: QuickAction(
-                              icon: Icons.folder_rounded,
-                              label: 'View Documents',
-                              color: Colors.orange,
-                              onTap: () => _navigateToTab(3),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 16),
-                    ],
-                  ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
               ),
             ),
@@ -538,7 +579,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 }
 
-// Notification Bell Widget for Tenant
+// Notification Bell Widget (same as before but with API integration)
 class _NotificationBell extends StatefulWidget {
   const _NotificationBell();
 
@@ -548,16 +589,22 @@ class _NotificationBell extends StatefulWidget {
 
 class _NotificationBellState extends State<_NotificationBell> {
   int _unreadCount = 0;
+  final NotificationService _notificationService = NotificationService();
 
   @override
   void initState() {
     super.initState();
     _updateCount();
+    _notificationService.notificationsStream.listen((_) {
+      if (mounted) {
+        _updateCount();
+      }
+    });
   }
 
   void _updateCount() {
     setState(() {
-      _unreadCount = NotificationService().unreadCount;
+      _unreadCount = _notificationService.unreadCount;
     });
   }
 
@@ -609,4 +656,10 @@ class _NotificationBellState extends State<_NotificationBell> {
       ],
     );
   }
+}
+
+// Helper function for INR formatting
+String fmtINR(dynamic amount) {
+  final num = amount is double ? amount : (amount ?? 0).toDouble();
+  return '₹${NumberFormat('#,##,##0.00', 'en_IN').format(num)}';
 }

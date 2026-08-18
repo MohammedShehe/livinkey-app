@@ -1,11 +1,14 @@
+// lib/screens/auth/login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:livinkey/models/auth_models.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../widgets/livinkey_logo.dart';
-import '../../services/audio_service.dart';
-import '../../services/auth_service.dart';
+import '../../services/api_service.dart';
+import '../../services/notification_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../widgets/common/snackbar_helper.dart';
@@ -13,6 +16,7 @@ import '../tenant/tenant_screen.dart';
 import '../guest/guest_screen.dart';
 import 'forgot_password_screen.dart';
 import 'signup_screen.dart';
+import 'change_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -34,35 +38,30 @@ class _LoginScreenState extends State<LoginScreen>
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _isTenantLogin = true;
 
   late final TapGestureRecognizer _signUpRecognizer;
   late final TapGestureRecognizer _forgotPasswordRecognizer;
 
-  // Helper method to get responsive logo size
+  final ApiService _api = ApiService();
+
   double _getLogoSize(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
     final double screenHeight = MediaQuery.of(context).size.height;
-
-    // Use the smaller dimension to ensure it fits
     final double minDimension = screenWidth < screenHeight ? screenWidth : screenHeight;
 
-    // For tablets (width >= 600), use larger size
     if (screenWidth >= 600) {
-      return minDimension * 0.25; // 25% for tablets
+      return minDimension * 0.25;
     } else if (screenWidth >= 400) {
-      return minDimension * 0.18; // 18% for large phones
+      return minDimension * 0.18;
     } else {
-      return minDimension * 0.14; // 14% for small phones
+      return minDimension * 0.14;
     }
   }
 
   @override
   void initState() {
     super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      AudioService.stopBackgroundMusic();
-    });
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 1200),
@@ -90,10 +89,7 @@ class _LoginScreenState extends State<LoginScreen>
     );
 
     _logoScaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _fadeController,
-        curve: Curves.easeOutBack,
-      ),
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeOutBack),
     );
 
     _signUpRecognizer = TapGestureRecognizer()
@@ -126,8 +122,7 @@ class _LoginScreenState extends State<LoginScreen>
           PageRouteBuilder(
             pageBuilder: (context, animation, secondaryAnimation) =>
                 const ForgotPasswordScreen(),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
               const begin = Offset(1.0, 0.0);
               const end = Offset.zero;
               const curve = Curves.easeInOutCubic;
@@ -147,6 +142,12 @@ class _LoginScreenState extends State<LoginScreen>
       _fadeController.forward();
       _slideController.forward();
     });
+
+    _initializeApi();
+  }
+
+  Future<void> _initializeApi() async {
+    await _api.init();
   }
 
   @override
@@ -165,7 +166,10 @@ class _LoginScreenState extends State<LoginScreen>
     return emailRegex.hasMatch(email);
   }
 
-  void _handleLogin() async {
+  // ============================================================
+  // FIXED: Login handler with proper role-based navigation
+  // ============================================================
+  Future<void> _handleLogin() async {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text.trim();
 
@@ -184,115 +188,147 @@ class _LoginScreenState extends State<LoginScreen>
       return;
     }
 
-    if (!AuthService.isValidCredentials(email, password)) {
-      SnackbarHelper.showError(
-        context,
-        'Invalid credentials. Please try again.',
-      );
-      return;
-    }
-
     setState(() => _isLoading = true);
 
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      LoginResponse response;
 
-    setState(() => _isLoading = false);
+      if (_isTenantLogin) {
+        response = await _api.tenantLogin(email, password);
+      } else {
+        response = await _api.guestLogin(email, password);
+      }
 
-    if (mounted) {
+      if (!mounted) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // ============================================================
+      // FIXED: Debug print the response
+      // ============================================================
+      print('Login response success: ${response.success}');
+      print('Login response token: ${response.token != null}');
+      print('Login response user: ${response.user != null}');
+      print('Login response user role: ${response.user?.role}');
+      print('Login response mustChangePassword: ${response.mustChangePassword}');
+
+      // Check if login was successful
+      if (!response.success) {
+        SnackbarHelper.showError(context, response.message);
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Ensure we have a token and user
+      if (response.token == null || response.token!.isEmpty) {
+        SnackbarHelper.showError(context, 'Invalid login response: Missing token');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      if (response.user == null) {
+        SnackbarHelper.showError(context, 'Invalid login response: Missing user data');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // ============================================================
+      // FIXED: Validate user role
+      // ============================================================
+      final String userRole = response.user!.role;
+      print('User role after validation: "$userRole"');
+
+      if (userRole.isEmpty) {
+        SnackbarHelper.showError(context, 'Invalid user role: Role is empty');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      if (userRole != 'tenant' && userRole != 'guest') {
+        SnackbarHelper.showError(context, 'Unknown user role: "$userRole"');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Save token and user
+      await _api.setToken(response.token!, role: response.user!.role);
+      await _api.saveUser(response.user!);
+
+      // Initialize notification service
+      final isTenant = response.user!.role == 'tenant';
+      await NotificationService().initialize(isTenant: isTenant);
+
       SnackbarHelper.showSuccess(context, 'Login successful!');
 
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 300));
 
+      if (!mounted) return;
+
+      // ============================================================
+      // FIXED: Check must_change_password FIRST for tenants
+      // ============================================================
+      if (response.mustChangePassword && response.user!.role == 'tenant') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => ChangePasswordScreen(
+              email: response.user!.email,
+              isTenant: true,
+            ),
+          ),
+        );
+        return;
+      }
+
+      // ============================================================
+      // FIXED: Role-based navigation with clean state
+      // ============================================================
+      if (response.user!.role == 'tenant') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const TenantScreen()),
+        );
+      } else if (response.user!.role == 'guest') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const GuestScreen()),
+        );
+      } else {
+        // This should never happen now that we validate above
+        SnackbarHelper.showError(context, 'Unknown user role: "${response.user!.role}"');
+        setState(() => _isLoading = false);
+      }
+
+    } catch (e) {
+      print('Login error: $e');
+      SnackbarHelper.showError(context, 'An error occurred. Please try again.');
+      setState(() => _isLoading = false);
+    } finally {
       if (mounted) {
-        final String? role = AuthService.getRole(email);
-
-        if (role == AuthService.tenantRole) {
-          _navigateToScreen(const TenantScreen(), 'Tenant');
-        } else if (role == AuthService.guestRole) {
-          _navigateToScreen(const GuestScreen(), 'Guest');
-        } else {
-          SnackbarHelper.showError(
-            context,
-            'Unknown role. Please contact support.',
-          );
-        }
+        setState(() => _isLoading = false);
       }
     }
-  }
-
-  void _navigateToScreen(Widget screen, String role) {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => screen,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(0.0, 0.3);
-          const end = Offset.zero;
-          const curve = Curves.easeInOutCubic;
-          var tween = Tween(begin: begin, end: end)
-              .chain(CurveTween(curve: curve));
-          var offsetAnimation = animation.drive(tween);
-
-          var fadeTween = Tween<double>(begin: 0.0, end: 1.0);
-          var fadeAnimation = animation.drive(fadeTween);
-
-          return FadeTransition(
-            opacity: fadeAnimation,
-            child: SlideTransition(
-              position: offsetAnimation,
-              child: child,
-            ),
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 600),
-      ),
-    );
   }
 
   Future<void> _launchUrl(String url) async {
     try {
       final Uri uri = Uri.parse(url);
-
       if (await canLaunchUrl(uri)) {
-        await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
-      } else {
-        await launchUrl(
-          uri,
-          mode: LaunchMode.inAppWebView,
-        );
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
       if (mounted) {
-        SnackbarHelper.showError(context, 'Could not open the link. Please try again.');
+        SnackbarHelper.showError(context, 'Could not open the link.');
       }
     }
   }
 
   Future<void> _launchWhatsApp() async {
-    final String phoneNumber = kWhatsAppNumber;
-    final String url = 'https://wa.me/$phoneNumber';
-
+    final String url = 'https://wa.me/$kWhatsAppNumber';
     try {
       final Uri uri = Uri.parse(url);
-
       if (await canLaunchUrl(uri)) {
-        await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
       } else {
-        final String webUrl = 'https://web.whatsapp.com/send?phone=$phoneNumber';
-        final Uri webUri = Uri.parse(webUrl);
-        if (await canLaunchUrl(webUri)) {
-          await launchUrl(
-            webUri,
-            mode: LaunchMode.externalApplication,
-          );
-        } else {
-          SnackbarHelper.showError(context, 'Please install WhatsApp to continue.');
-        }
+        SnackbarHelper.showError(context, 'Please install WhatsApp to continue.');
       }
     } catch (e) {
       SnackbarHelper.showError(context, 'Could not open WhatsApp.');
@@ -301,7 +337,6 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Get responsive logo size
     final double logoSize = _getLogoSize(context);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -389,7 +424,90 @@ class _LoginScreenState extends State<LoginScreen>
                             ],
                           ),
 
-                          const SizedBox(height: 34),
+                          const SizedBox(height: 24),
+
+                          // Role toggle
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.06),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.08),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      if (!_isTenantLogin) {
+                                        setState(() => _isTenantLogin = true);
+                                        hapticFeedback();
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _isTenantLogin
+                                            ? const Color(0xFF92C24A)
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        'Tenant',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: _isTenantLogin
+                                              ? Colors.black
+                                              : Colors.white.withOpacity(0.5),
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      if (_isTenantLogin) {
+                                        setState(() => _isTenantLogin = false);
+                                        hapticFeedback();
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _isTenantLogin
+                                            ? Colors.transparent
+                                            : const Color(0xFFFF9800),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        'Guest',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: _isTenantLogin
+                                              ? Colors.white.withOpacity(0.5)
+                                              : Colors.black,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
 
                           // Email Field
                           _buildTextField(
@@ -474,11 +592,15 @@ class _LoginScreenState extends State<LoginScreen>
                                   TextSpan(
                                     text: 'Sign Up',
                                     style: TextStyle(
-                                      color: const Color(0xFF92C24A),
+                                      color: _isTenantLogin
+                                          ? const Color(0xFF92C24A)
+                                          : const Color(0xFFFF9800),
                                       fontWeight: FontWeight.w700,
                                       decoration: TextDecoration.underline,
-                                      decorationColor:
-                                          const Color(0xFF92C24A).withOpacity(0.3),
+                                      decorationColor: (_isTenantLogin
+                                              ? const Color(0xFF92C24A)
+                                              : const Color(0xFFFF9800))
+                                          .withOpacity(0.3),
                                       decorationThickness: 1.5,
                                     ),
                                     recognizer: _signUpRecognizer,
@@ -595,25 +717,22 @@ class _LoginScreenState extends State<LoginScreen>
       width: double.infinity,
       height: 56,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF92C24A),
-            Color(0xFF7CB342),
-          ],
+        gradient: LinearGradient(
+          colors: _isTenantLogin
+              ? [const Color(0xFF92C24A), const Color(0xFF7CB342)]
+              : [const Color(0xFFFF9800), const Color(0xFFF57C00)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF92C24A).withOpacity(0.35),
+            color: (_isTenantLogin
+                    ? const Color(0xFF92C24A)
+                    : const Color(0xFFFF9800))
+                .withOpacity(0.35),
             blurRadius: 30,
             offset: const Offset(0, 10),
-          ),
-          BoxShadow(
-            color: const Color(0xFF92C24A).withOpacity(0.15),
-            blurRadius: 50,
-            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -634,25 +753,23 @@ class _LoginScreenState extends State<LoginScreen>
                 width: 24,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Colors.black,
-                  ),
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                 ),
               )
-            : const Row(
+            : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    'Sign In',
-                    style: TextStyle(
+                    _isTenantLogin ? 'Sign In as Tenant' : 'Sign In as Guest',
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                       color: Colors.black,
                       letterSpacing: 0.5,
                     ),
                   ),
-                  SizedBox(width: 10),
-                  Icon(
+                  const SizedBox(width: 10),
+                  const Icon(
                     Icons.arrow_forward_rounded,
                     color: Colors.black,
                     size: 22,
@@ -665,10 +782,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   Widget _buildSocialSection() {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 20,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -695,9 +809,7 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: Text(
                   'Connect with Us',
                   style: TextStyle(

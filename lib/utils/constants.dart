@@ -5,9 +5,13 @@ const Color kLivinkeyGreen = Color(0xFF92C24A);
 const Color kLivinkeyBlack = Color(0xFF000000);
 const Color kLivinkeyWhite = Color(0xFFFFFFFF);
 
+// API Configuration
+const String kApiBaseUrl = 'http://localhost:5000/api';
+
 // Asset paths
 const String kLogoBaseAsset = 'assets/images/livinkey_base_white.png';
-const String kLogoKeyAsset = 'assets/images/livinkey_key_white.png';
+const String kLogoKeyAsset = 'assets/images/livinkey_key_white_without_ring.png';
+const String kLogoRingDotAsset = 'assets/images/livinkey_key_ringdot_white.png';
 const String kGeneralLogo = 'assets/images/general_logo.png';
 
 // Strings
@@ -29,13 +33,7 @@ const Duration kFadeDuration = Duration(milliseconds: 600);
 const Duration kSlideDuration = Duration(milliseconds: 700);
 const Duration kSnackbarDuration = Duration(seconds: 2);
 
-// Demo credentials
-const String kTenantEmail = 'molittle1011@gmail.com';
-const String kTenantPassword = 'Tenant@123';
-const String kGuestEmail = 'mosnake111@gmail.com';
-const String kGuestPassword = 'Guest@123';
-
-// Guest specific
-const String kGuestWhatsAppNumber = '919878383497';
-const String kGuestWhatsAppUrl = 'https://wa.me/$kGuestWhatsAppNumber';
-const String kGuestInstagramUrl = 'https://www.instagram.com/livinkey?igsh=MTc0eWdyeTNvcmFtZA==';
+// Storage keys
+const String kStorageToken = 'lk_token';
+const String kStorageUser = 'lk_user';
+const String kStorageRole = 'lk_role';

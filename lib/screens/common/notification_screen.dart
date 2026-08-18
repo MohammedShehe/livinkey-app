@@ -1,4 +1,3 @@
-// lib/screens/common/notification_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/common/snackbar_helper.dart';
@@ -23,6 +22,7 @@ class _NotificationScreenState extends State<NotificationScreen>
   final NotificationService _notificationService = NotificationService();
   List<NotificationModel> _notifications = [];
   bool _isLoading = false;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -51,46 +51,147 @@ class _NotificationScreenState extends State<NotificationScreen>
     super.dispose();
   }
 
-  void _loadNotifications() {
-    setState(() {
-      _notifications = _notificationService.notifications;
-    });
+  // ============================================================
+  // FIXED: Load real notifications from API
+  // ============================================================
+  Future<void> _loadNotifications() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      await _notificationService.refresh(isTenant: true);
+      if (mounted) {
+        setState(() {
+          _notifications = _notificationService.notifications;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        SnackbarHelper.showError(context, 'Failed to load notifications');
+      }
+    }
   }
 
-  // FIXED: Changed to Future<void> to match RefreshCallback type
   Future<void> _handleRefresh() async {
-    setState(() => _isLoading = true);
-    await Future.delayed(const Duration(seconds: 1));
+    if (!mounted) return;
+    setState(() => _isRefreshing = true);
+    await _loadNotifications();
     if (mounted) {
-      _loadNotifications();
-      setState(() => _isLoading = false);
+      setState(() => _isRefreshing = false);
+    }
+  }
+
+  // ============================================================
+  // FIXED: Mark notification as read with proper API call
+  // ============================================================
+  Future<void> _markAsRead(NotificationModel notification) async {
+    if (notification.isRead) return;
+    
+    try {
+      await _notificationService.markAsRead(notification.id, isTenant: true);
+      // Update local state
+      setState(() {
+        final index = _notifications.indexWhere((n) => n.id == notification.id);
+        if (index != -1) {
+          _notifications[index] = NotificationModel(
+            id: notification.id,
+            title: notification.title,
+            message: notification.message,
+            type: notification.type,
+            createdAt: notification.createdAt,
+            isRead: true,
+            entityId: notification.entityId,
+            entityType: notification.entityType,
+            link: notification.link,
+            icon: notification.icon,
+            color: notification.color,
+          );
+        }
+      });
+    } catch (e) {
+      SnackbarHelper.showError(context, 'Failed to mark as read');
+    }
+  }
+
+  // ============================================================
+  // FIXED: Mark all notifications as read with proper API call
+  // ============================================================
+  Future<void> _markAllAsRead() async {
+    if (_notifications.isEmpty) return;
+    
+    try {
+      await _notificationService.markAllAsRead(isTenant: true);
+      // Update all notifications
+      setState(() {
+        _notifications = _notifications.map((n) => NotificationModel(
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          type: n.type,
+          createdAt: n.createdAt,
+          isRead: true,
+          entityId: n.entityId,
+          entityType: n.entityType,
+          link: n.link,
+          icon: n.icon,
+          color: n.color,
+        )).toList();
+      });
+      SnackbarHelper.showSuccess(context, 'All notifications marked as read');
+    } catch (e) {
+      SnackbarHelper.showError(context, 'Failed to mark all as read');
+    }
+  }
+
+  // ============================================================
+  // FIXED: Delete notification
+  // ============================================================
+  Future<void> _deleteNotification(NotificationModel notification) async {
+    try {
+      await _notificationService.deleteNotification(notification.id, isTenant: true);
+      setState(() {
+        _notifications.removeWhere((n) => n.id == notification.id);
+      });
+      SnackbarHelper.show(context, 'Notification dismissed');
+    } catch (e) {
+      SnackbarHelper.showError(context, 'Failed to delete notification');
     }
   }
 
   String _getTypeIcon(String type) {
     switch (type) {
-      case 'bill':
-        return '💰';
-      case 'maintenance':
-        return '🔧';
-      case 'document':
+      case 'bill_created':
         return '📄';
+      case 'bill_paid':
+        return '✅';
+      case 'bill_partially_paid':
+        return '💳';
+      case 'bill_fine_applied':
+        return '💰';
+      case 'maintenance_created':
+        return '🔧';
+      case 'maintenance_started':
+        return '🔄';
+      case 'maintenance_completed':
+        return '✅';
+      case 'document_reminder':
+        return '📋';
+      case 'efrro_expiry':
+        return '🛂';
+      case 'payment_reminder':
+        return '💸';
       default:
         return '📢';
     }
   }
 
   Color _getTypeColor(String type) {
-    switch (type) {
-      case 'bill':
-        return Colors.orange;
-      case 'maintenance':
-        return Colors.blue;
-      case 'document':
-        return Colors.purple;
-      default:
-        return kLivinkeyGreen;
-    }
+    if (type.contains('bill')) return Colors.orange;
+    if (type.contains('maintenance')) return Colors.blue;
+    if (type.contains('document') || type.contains('efrro')) return Colors.purple;
+    if (type.contains('payment')) return Colors.red;
+    return kLivinkeyGreen;
   }
 
   String _formatTime(DateTime timestamp) {
@@ -147,17 +248,9 @@ class _NotificationScreenState extends State<NotificationScreen>
           ),
         ),
         actions: [
-          if (_notifications.isNotEmpty)
+          if (_notifications.isNotEmpty && _notifications.any((n) => !n.isRead))
             TextButton(
-              onPressed: () {
-                _notificationService.markAllAsRead();
-                _loadNotifications();
-                hapticFeedback();
-                SnackbarHelper.showSuccess(
-                  context,
-                  'All notifications marked as read',
-                );
-              },
+              onPressed: _markAllAsRead,
               child: Text(
                 'Mark All Read',
                 style: TextStyle(
@@ -170,34 +263,40 @@ class _NotificationScreenState extends State<NotificationScreen>
           const SizedBox(width: 8),
         ],
       ),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: RefreshIndicator(
-            onRefresh: _handleRefresh,
-            color: kLivinkeyGreen,
-            backgroundColor: kLivinkeyBlack,
-            child: _notifications.isEmpty
-                ? _buildEmptyState()
-                : ListView.separated(
-                    physics: const BouncingScrollPhysics(
-                      parent: AlwaysScrollableScrollPhysics(),
-                    ),
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                    itemCount: _notifications.length,
-                    separatorBuilder: (context, index) => Divider(
-                      color: Colors.white.withOpacity(0.05),
-                      height: 1,
-                    ),
-                    itemBuilder: (context, index) {
-                      final notification = _notifications[index];
-                      return _buildNotificationItem(notification);
-                    },
-                  ),
-          ),
-        ),
-      ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(kLivinkeyGreen),
+              ),
+            )
+          : FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: RefreshIndicator(
+                  onRefresh: _handleRefresh,
+                  color: kLivinkeyGreen,
+                  backgroundColor: kLivinkeyBlack,
+                  child: _notifications.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.separated(
+                          physics: const BouncingScrollPhysics(
+                            parent: AlwaysScrollableScrollPhysics(),
+                          ),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                          itemCount: _notifications.length,
+                          separatorBuilder: (context, index) => Divider(
+                            color: Colors.white.withOpacity(0.05),
+                            height: 1,
+                          ),
+                          itemBuilder: (context, index) {
+                            final notification = _notifications[index];
+                            return _buildNotificationItem(notification);
+                          },
+                        ),
+                ),
+              ),
+            ),
     );
   }
 
@@ -240,11 +339,15 @@ class _NotificationScreenState extends State<NotificationScreen>
     );
   }
 
+  // ============================================================
+  // FIXED: Notification item with proper read handling
+  // ============================================================
   Widget _buildNotificationItem(NotificationModel notification) {
+    final String key = notification.id.toString();
     final bool isUnread = !notification.isRead;
 
     return Dismissible(
-      key: Key(notification.id),
+      key: Key(key),
       direction: DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
@@ -260,19 +363,16 @@ class _NotificationScreenState extends State<NotificationScreen>
         ),
       ),
       onDismissed: (direction) {
-        _notificationService.deleteNotification(notification.id);
-        _loadNotifications();
-        SnackbarHelper.show(context, 'Notification deleted');
+        _deleteNotification(notification);
       },
       child: GestureDetector(
         onTap: () {
           if (isUnread) {
-            _notificationService.markAsRead(notification.id);
-            _loadNotifications();
+            _markAsRead(notification);
           }
           // Navigate to action route if available
-          if (notification.actionRoute != null) {
-            Navigator.pop(context, notification.actionRoute);
+          if (notification.link != null) {
+            Navigator.pop(context, notification.link);
           }
         },
         child: Container(
@@ -323,12 +423,19 @@ class _NotificationScreenState extends State<NotificationScreen>
                           ),
                         ),
                         if (!isUnread)
-                          Text(
-                            'Read',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.25),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Read',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.3),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
                         if (isUnread)
@@ -357,7 +464,7 @@ class _NotificationScreenState extends State<NotificationScreen>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _formatTime(notification.timestamp),
+                      _formatTime(notification.createdAt),
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.3),
                         fontSize: 11,

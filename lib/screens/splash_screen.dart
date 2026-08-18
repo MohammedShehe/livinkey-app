@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import '../widgets/livinkey_logo.dart';
 import 'get_started_screen.dart';
+import 'auth/login_screen.dart';
 import '../services/audio_service.dart';
+import '../services/api_service.dart';
+import 'tenant/tenant_screen.dart';
+import 'guest/guest_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -14,6 +18,7 @@ class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _keyRotation;
+  final ApiService _api = ApiService();
 
   @override
   void initState() {
@@ -25,20 +30,12 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller = AnimationController(
       vsync: this,
-      // Slowed from 7500ms -> 9500ms so each hop has more room to
-      // breathe. Combined with the sine-based easing now used inside
-      // LivinkeyLogo, this is what makes the bounce read as smooth
-      // rather than quick/snappy.
       duration: const Duration(milliseconds: 9500),
     );
 
     _keyRotation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.linear),
     );
-    // Note: curve is linear on purpose. All the easing (per-hop ease-in/
-    // out, arc shaping, squash-and-stretch) is already computed inside
-    // LivinkeyLogo based on raw progress — layering a second curve here
-    // would fight that shaping and make the motion feel uneven again.
 
     _startSequence();
   }
@@ -56,9 +53,32 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
 
     if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const GetStartedScreen()),
-      );
+      // ============================================================
+      // FIXED: Check if user is already logged in
+      // ============================================================
+      await _api.init();
+      final isLoggedIn = await _api.isLoggedIn();
+      
+      if (isLoggedIn) {
+        final role = await _api.getStoredRole();
+        if (role == 'tenant') {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const TenantScreen()),
+          );
+        } else if (role == 'guest') {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const GuestScreen()),
+          );
+        } else {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const LoginScreen()),
+          );
+        }
+      } else {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const GetStartedScreen()),
+        );
+      }
     }
   }
 
@@ -70,12 +90,6 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Responsive logo width: previously LivinkeyLogo() was called with no
-    // width at all, which silently fell back to a FIXED 300px regardless
-    // of device size — too big on small phones, too small on tablets.
-    // Instead we take a percentage of the screen width and clamp it so it
-    // never gets too cramped on small phones or absurdly large on
-    // tablets/desktop web.
     final double screenWidth = MediaQuery.of(context).size.width;
     final double logoWidth = (screenWidth * 0.72).clamp(220.0, 420.0);
 

@@ -1,15 +1,16 @@
-// lib/screens/guest/guest_home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
+import '../../services/api_service.dart';
+import '../../services/notification_service.dart';
 import '../../widgets/guest/pg_card.dart';
 import '../../widgets/guest/pg_detail_modal.dart';
 import '../../models/pg_model.dart';
-import 'guest_screen.dart';
-import '../../services/notification_service.dart';
-import '../common/notification_screen.dart';
 import '../../widgets/common/snackbar_helper.dart';
+import '../common/notification_screen.dart';
+import 'guest_screen.dart';
 
 class GuestHomeScreen extends StatefulWidget {
   const GuestHomeScreen({super.key});
@@ -27,139 +28,17 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
   String _selectedFilter = 'All';
-  final String guestName = 'Guest User';
+  String _guestName = 'Guest User';
+  String _greeting = 'Good Morning';
   bool _isRefreshing = false;
+  bool _isLoading = true;
 
-  final List<PgModel> _allPgs = [
-    PgModel(
-      id: '1',
-      name: 'Green Valley PG',
-      location: 'Near LPU, Phagwara',
-      rating: 4.8,
-      totalRooms: 20,
-      availableRooms: 5,
-      rent: 8500,
-      status: 'Vacant',
-      imageUrl: 'assets/images/pg1.jpg',
-      amenities: ['Wi-Fi', 'AC', 'Parking', 'Security', 'Laundry', 'Gym'],
-      comments: [
-        UserComment('Rahul K.', 'Great place! Very clean and affordable.'),
-        UserComment('Priya S.', 'Good food and friendly staff.'),
-        UserComment('Amit R.', 'Nice location, close to university.'),
-      ],
-      description:
-          'Green Valley PG offers comfortable living spaces with modern amenities. Located near LPU, it\'s perfect for students and professionals.',
-    ),
-    PgModel(
-      id: '2',
-      name: 'Sunshine PG',
-      location: 'Near Lovely Professional University',
-      rating: 4.6,
-      totalRooms: 15,
-      availableRooms: 0,
-      rent: 7500,
-      status: 'Full Occupied',
-      imageUrl: 'assets/images/pg2.jpg',
-      amenities: ['Wi-Fi', 'AC', 'Parking', 'Security', 'Food'],
-      comments: [
-        UserComment('Sneha M.', 'Good food and comfortable rooms.'),
-        UserComment('Vikram S.', 'Affordable rent, nice place.'),
-      ],
-      description:
-          'Sunshine PG provides quality accommodation with delicious home-cooked meals.',
-    ),
-    PgModel(
-      id: '3',
-      name: 'Royal PG',
-      location: 'Phagwara, Punjab',
-      rating: 4.9,
-      totalRooms: 25,
-      availableRooms: 8,
-      rent: 9500,
-      status: 'Vacant',
-      imageUrl: 'assets/images/pg3.jpg',
-      amenities: [
-        'Wi-Fi',
-        'AC',
-        'Parking',
-        'Security',
-        'Laundry',
-        'Gym',
-        'Swimming Pool'
-      ],
-      comments: [
-        UserComment('Arjun P.', 'Best PG in town! Highly recommended.'),
-        UserComment('Neha G.', 'Amazing amenities and service.'),
-        UserComment('Rohit K.', 'Great place for students.'),
-      ],
-      description:
-          'Royal PG offers premium accommodation with world-class amenities including a swimming pool.',
-    ),
-    PgModel(
-      id: '4',
-      name: 'Cozy Nest PG',
-      location: 'Near LPU Gate 1',
-      rating: 4.3,
-      totalRooms: 12,
-      availableRooms: 2,
-      rent: 6800,
-      status: 'Vacant',
-      imageUrl: 'assets/images/pg4.jpg',
-      amenities: ['Wi-Fi', 'Parking', 'Security', 'Food'],
-      comments: [
-        UserComment('Deepak K.', 'Budget-friendly PG with good facilities.'),
-      ],
-      description:
-          'Cozy Nest PG provides affordable accommodation with all essential amenities.',
-    ),
-    PgModel(
-      id: '5',
-      name: 'Elite PG',
-      location: 'Phagwara City Center',
-      rating: 4.7,
-      totalRooms: 30,
-      availableRooms: 0,
-      rent: 10000,
-      status: 'Full Occupied',
-      imageUrl: 'assets/images/pg5.jpg',
-      amenities: [
-        'Wi-Fi',
-        'AC',
-        'Parking',
-        'Security',
-        'Laundry',
-        'Gym',
-        'Swimming Pool',
-        'Restaurant'
-      ],
-      comments: [
-        UserComment('Ananya R.', 'Luxury living at affordable prices.'),
-        UserComment('Karan S.', 'Excellent facilities and service.'),
-        UserComment('Meera D.', 'Best PG in Phagwara!'),
-      ],
-      description: 'Elite PG offers luxury accommodation with premium amenities.',
-    ),
-  ];
+  final ApiService _api = ApiService();
 
-  List<PgModel> get _filteredPgs {
-    List<PgModel> filtered = List.from(_allPgs);
-
-    filtered.sort((a, b) {
-      if (a.status == 'Vacant' && b.status != 'Vacant') return -1;
-      if (a.status != 'Vacant' && b.status == 'Vacant') return 1;
-      return 0;
-    });
-
-    if (_selectedFilter == 'Vacant') {
-      filtered = filtered.where((pg) => pg.status == 'Vacant').toList();
-    } else if (_selectedFilter == 'Full Occupied') {
-      filtered = filtered.where((pg) => pg.status == 'Full Occupied').toList();
-    }
-
-    return filtered;
-  }
-
-  int get _vacantCount => _allPgs.where((pg) => pg.status == 'Vacant').length;
+  List<PgModel> _allPgs = [];
+  List<PgModel> _filteredPgs = [];
+  int _totalPGs = 0;
+  int _vacantCount = 0;
 
   @override
   void initState() {
@@ -177,7 +56,10 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
     ).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOutCubic),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) => _fadeController.forward());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fadeController.forward();
+      _loadData();
+    });
   }
 
   @override
@@ -186,12 +68,135 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
     super.dispose();
   }
 
+  Future<void> _loadData() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      // ============================================================
+      // FIXED: Load guest dashboard with stats
+      // ============================================================
+      try {
+        final dashRes = await _api.getGuestDashboard();
+        print('Guest dashboard response: $dashRes');
+        
+        if (dashRes['success'] == true) {
+          final data = dashRes['data'];
+          if (data != null && data is Map<String, dynamic>) {
+            _guestName = data['name']?.toString() ?? data['full_name']?.toString() ?? 'Guest User';
+            _greeting = data['greeting']?.toString() ?? getTimeOfDay();
+            
+            // ============================================================
+            // FIXED: Get total PGs from dashboard response
+            // ============================================================
+            _totalPGs = data['total_pgs'] ?? 0;
+          }
+        }
+      } catch (dashError) {
+        print('Dashboard error (non-critical): $dashError');
+      }
+
+      // ============================================================
+      // FIXED: Load PGs
+      // ============================================================
+      try {
+        final pgsRes = await _api.getPublicPGs();
+        print('Public PGs response: ${pgsRes['success']}, count: ${pgsRes['data'] is List ? (pgsRes['data'] as List).length : 'not a list'}');
+        
+        if (pgsRes['success'] == true && pgsRes['data'] != null) {
+          final data = pgsRes['data'];
+          if (data is List) {
+            _allPgs = data.map((pg) => PgModel.fromJson(pg)).toList();
+            
+            // ============================================================
+            // FIXED: Get vacant count from response or calculate
+            // ============================================================
+            _vacantCount = pgsRes['vacant_count'] ?? 
+                           _allPgs.where((pg) => pg.statusText == 'Vacant').length;
+            
+            // Update total PGs if not set from dashboard
+            if (_totalPGs == 0) {
+              _totalPGs = _allPgs.length;
+            }
+            
+            _applyFilter();
+          } else {
+            print('PG data is not a List: ${data.runtimeType}');
+            if (data is Map<String, dynamic> && data['data'] is List) {
+              final innerData = data['data'] as List;
+              _allPgs = innerData.map((pg) => PgModel.fromJson(pg)).toList();
+              _vacantCount = _allPgs.where((pg) => pg.statusText == 'Vacant').length;
+              if (_totalPGs == 0) {
+                _totalPGs = _allPgs.length;
+              }
+              _applyFilter();
+            } else {
+              _allPgs = [];
+              _filteredPgs = [];
+              _vacantCount = 0;
+              _totalPGs = 0;
+            }
+          }
+        } else {
+          print('PG API returned error: ${pgsRes['message']}');
+          _allPgs = [];
+          _filteredPgs = [];
+          _vacantCount = 0;
+          _totalPGs = 0;
+        }
+      } catch (pgsError) {
+        print('PG loading error: $pgsError');
+        _allPgs = [];
+        _filteredPgs = [];
+        _vacantCount = 0;
+        _totalPGs = 0;
+      }
+
+      // Refresh notifications (non-critical)
+      try {
+        await NotificationService().refresh(isTenant: false);
+      } catch (notifError) {
+        print('Notification refresh error (non-critical): $notifError');
+      }
+      
+      if (_allPgs.isEmpty && _totalPGs == 0) {
+        SnackbarHelper.showWarning(context, 'No PGs available at the moment. Please try again later.');
+      }
+      
+    } catch (e) {
+      print('GuestHomeScreen _loadData error: $e');
+      if (mounted) {
+        SnackbarHelper.showError(context, 'Failed to load data');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _applyFilter() {
+    setState(() {
+      if (_selectedFilter == 'All') {
+        _filteredPgs = List.from(_allPgs);
+      } else {
+        _filteredPgs = _allPgs.where((pg) => pg.statusText == _selectedFilter).toList();
+      }
+    });
+  }
+
+  void _openDrawer() {
+    final state = context.findAncestorStateOfType<GuestScreenState>();
+    state?.openDrawer();
+  }
+
   Future<void> _handleRefresh() async {
     setState(() => _isRefreshing = true);
-    await Future.delayed(const Duration(seconds: 1));
+    await _loadData();
     if (mounted) {
       setState(() => _isRefreshing = false);
-      SnackbarHelper.showSuccess(context, 'Refreshed successfully!');
+      if (_allPgs.isNotEmpty) {
+        SnackbarHelper.showSuccess(context, 'Refreshed successfully!');
+      }
     }
   }
 
@@ -207,23 +212,20 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
 
   double _getLogoSize(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
-    if (screenWidth >= 600) {
-      return 120.0;
-    } else if (screenWidth >= 400) {
-      return 64.0;
-    } else {
-      return 50.0;
-    }
+    if (screenWidth >= 600) return 120.0;
+    if (screenWidth >= 400) return 64.0;
+    return 50.0;
   }
 
-  // Helper method to open drawer using the parent state
-  void _openDrawer() {
-    final state = context.findAncestorStateOfType<GuestScreenState>();
-    if (state != null) {
-      state.openDrawer();
-    } else {
-      Scaffold.of(context).openDrawer();
-    }
+  // ============================================================
+  // FIXED: Get greeting based on time of day
+  // ============================================================
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return 'Good Morning';
+    if (hour >= 12 && hour < 17) return 'Good Afternoon';
+    if (hour >= 17 && hour < 21) return 'Good Evening';
+    return 'Good Night';
   }
 
   @override
@@ -233,6 +235,27 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
     final double logoSize = _getLogoSize(context);
     final double bottomNavHeight = 76.0;
     final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: kLivinkeyBlack,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(kLivinkeyGreen),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Loading...',
+                style: TextStyle(color: Colors.white.withOpacity(0.5)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: kLivinkeyBlack,
@@ -254,14 +277,9 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
           ),
           onPressed: _openDrawer,
         ),
-        title: Image.asset(
-          kGeneralLogo,
-          height: logoSize,
-          width: logoSize,
-        ),
+        title: Image.asset(kGeneralLogo, height: logoSize, width: logoSize),
         centerTitle: false,
         actions: [
-          // Notification Bell Icon - Now visible in Guest
           const _NotificationBell(),
           Container(
             margin: const EdgeInsets.only(right: 16),
@@ -294,15 +312,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                 children: [
                   _PulsingDot(),
                   SizedBox(width: 6),
-                  Text(
-                    'Guest',
-                    style: TextStyle(
-                      color: Color(0xFFFF9800),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
+                  Text('Guest', style: TextStyle(color: Color(0xFFFF9800), fontSize: 11, fontWeight: FontWeight.w700)),
                 ],
               ),
             ),
@@ -337,12 +347,11 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'Good ${getTimeOfDay()}',
+                            _greeting,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.5),
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
-                              letterSpacing: 0.2,
                             ),
                           ),
                         ],
@@ -355,7 +364,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                             colors: [Colors.white, Colors.white.withOpacity(0.85)],
                           ).createShader(bounds),
                           child: Text(
-                            guestName,
+                            _guestName,
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 26,
@@ -368,6 +377,9 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                     ],
                   ),
                 ),
+                // ============================================================
+                // FIXED: Stats card with correct total PGs count
+                // ============================================================
                 Container(
                   margin: const EdgeInsets.fromLTRB(20, 14, 20, 4),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -375,16 +387,10 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [
-                        kLivinkeyGreen.withOpacity(0.14),
-                        kLivinkeyGreen.withOpacity(0.02),
-                      ],
+                      colors: [kLivinkeyGreen.withOpacity(0.14), kLivinkeyGreen.withOpacity(0.02)],
                     ),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: kLivinkeyGreen.withOpacity(0.18),
-                      width: 1,
-                    ),
+                    border: Border.all(color: kLivinkeyGreen.withOpacity(0.18)),
                     boxShadow: [
                       BoxShadow(
                         color: kLivinkeyGreen.withOpacity(0.06),
@@ -398,9 +404,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [kLivinkeyGreen, const Color(0xFF66BB6A)],
-                          ),
+                          gradient: const LinearGradient(colors: [kLivinkeyGreen, Color(0xFF66BB6A)]),
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
@@ -410,11 +414,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                             ),
                           ],
                         ),
-                        child: const Icon(
-                          Icons.home_rounded,
-                          color: Colors.black,
-                          size: 20,
-                        ),
+                        child: const Icon(Icons.home_rounded, color: Colors.black, size: 20),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -431,9 +431,16 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                             ),
                             const SizedBox(height: 3),
                             Text(
-                              '$_vacantCount PGs available right now',
+                              // ============================================================
+                              // FIXED: Show actual count from _totalPGs
+                              // ============================================================
+                              _totalPGs > 0 
+                                  ? '$_totalPGs PGs available right now'
+                                  : 'No PGs available at the moment',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.55),
+                                color: _totalPGs > 0 
+                                    ? Colors.white.withOpacity(0.55) 
+                                    : Colors.orange.withOpacity(0.7),
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -441,6 +448,26 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                           ],
                         ),
                       ),
+                      // ============================================================
+                      // FIXED: Show vacancy badge
+                      // ============================================================
+                      if (_vacantCount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: kLivinkeyGreen.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: kLivinkeyGreen.withOpacity(0.3)),
+                          ),
+                          child: Text(
+                            '$_vacantCount Vacant',
+                            style: TextStyle(
+                              color: kLivinkeyGreen,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -463,13 +490,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                 const SizedBox(height: 16),
                 Expanded(
                   child: Padding(
-                    // FIXED: Reduced bottom padding to give more content area
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      0,
-                      20,
-                      bottomNavHeight + bottomSafeArea + 8, // Reduced from 16 to 8
-                    ),
+                    padding: EdgeInsets.fromLTRB(20, 0, 20, bottomNavHeight + bottomSafeArea + 8),
                     child: _filteredPgs.isEmpty
                         ? Center(
                             child: Column(
@@ -489,7 +510,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
-                                  'No PGs available',
+                                  _allPgs.isEmpty ? 'No PGs available' : 'No matching PGs',
                                   style: TextStyle(
                                     color: Colors.white.withOpacity(0.4),
                                     fontSize: 15,
@@ -498,23 +519,32 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Try a different filter',
+                                  _allPgs.isEmpty 
+                                      ? 'Check back later for new listings' 
+                                      : 'Try a different filter',
                                   style: TextStyle(
                                     color: Colors.white.withOpacity(0.2),
                                     fontSize: 12.5,
-                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextButton(
+                                  onPressed: _handleRefresh,
+                                  child: Text(
+                                    'Refresh',
+                                    style: TextStyle(
+                                      color: kLivinkeyGreen,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           )
                         : GridView.builder(
-                            physics: const BouncingScrollPhysics(
-                              parent: AlwaysScrollableScrollPhysics(),
-                            ),
+                            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                             padding: const EdgeInsets.only(bottom: 20),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: 2,
                               crossAxisSpacing: 14,
                               mainAxisSpacing: 14,
@@ -558,6 +588,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
       onTap: () {
         setState(() {
           _selectedFilter = label;
+          _applyFilter();
         });
         HapticFeedback.selectionClick();
       },
@@ -567,40 +598,21 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           gradient: isSelected
-              ? const LinearGradient(
-                  colors: [kLivinkeyGreen, Color(0xFF66BB6A)],
-                )
-              : LinearGradient(
-                  colors: [
-                    Colors.white.withOpacity(0.06),
-                    Colors.white.withOpacity(0.02),
-                  ],
-                ),
+              ? const LinearGradient(colors: [kLivinkeyGreen, Color(0xFF66BB6A)])
+              : LinearGradient(colors: [Colors.white.withOpacity(0.06), Colors.white.withOpacity(0.02)]),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: isSelected
-                ? kLivinkeyGreen
-                : Colors.white.withOpacity(0.08),
+            color: isSelected ? kLivinkeyGreen : Colors.white.withOpacity(0.08),
             width: isSelected ? 1.5 : 1,
           ),
           boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: kLivinkeyGreen.withOpacity(0.35),
-                    blurRadius: 14,
-                    offset: const Offset(0, 5),
-                  ),
-                ]
+              ? [BoxShadow(color: kLivinkeyGreen.withOpacity(0.35), blurRadius: 14, offset: const Offset(0, 5))]
               : [],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 14,
-              color: isSelected ? Colors.black : Colors.white.withOpacity(0.5),
-            ),
+            Icon(icon, size: 14, color: isSelected ? Colors.black : Colors.white.withOpacity(0.5)),
             const SizedBox(width: 6),
             Text(
               label,
@@ -608,7 +620,6 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                 color: isSelected ? Colors.black : Colors.white.withOpacity(0.65),
                 fontSize: 12.5,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                letterSpacing: 0.1,
               ),
             ),
           ],
@@ -625,8 +636,7 @@ class _PulsingDot extends StatefulWidget {
   State<_PulsingDot> createState() => _PulsingDotState();
 }
 
-class _PulsingDotState extends State<_PulsingDot>
-    with SingleTickerProviderStateMixin {
+class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1400),
@@ -649,7 +659,6 @@ class _PulsingDotState extends State<_PulsingDot>
   }
 }
 
-// Notification Bell Widget - Also used in Tenant
 class _NotificationBell extends StatefulWidget {
   const _NotificationBell();
 
@@ -664,6 +673,9 @@ class _NotificationBellState extends State<_NotificationBell> {
   void initState() {
     super.initState();
     _updateCount();
+    NotificationService().notificationsStream.listen((_) {
+      if (mounted) _updateCount();
+    });
   }
 
   void _updateCount() {
@@ -677,18 +689,12 @@ class _NotificationBellState extends State<_NotificationBell> {
     return Stack(
       children: [
         IconButton(
-          icon: Icon(
-            Icons.notifications_none_rounded,
-            color: Colors.white.withOpacity(0.8),
-            size: 26,
-          ),
+          icon: Icon(Icons.notifications_none_rounded, color: Colors.white.withOpacity(0.8), size: 26),
           onPressed: () {
             hapticFeedback();
             Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (context) => const NotificationScreen(),
-              ),
+              MaterialPageRoute(builder: (context) => const NotificationScreen()),
             ).then((_) => _updateCount());
           },
         ),
@@ -698,21 +704,11 @@ class _NotificationBellState extends State<_NotificationBell> {
             top: 4,
             child: Container(
               padding: const EdgeInsets.all(4),
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-              constraints: const BoxConstraints(
-                minWidth: 18,
-                minHeight: 18,
-              ),
+              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
               child: Text(
                 _unreadCount > 9 ? '9+' : '$_unreadCount',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
                 textAlign: TextAlign.center,
               ),
             ),
