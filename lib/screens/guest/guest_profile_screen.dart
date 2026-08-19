@@ -1,4 +1,3 @@
-// lib/screens/guest/guest_profile_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -19,7 +18,7 @@ class GuestProfileScreen extends StatefulWidget {
 }
 
 class _GuestProfileScreenState extends State<GuestProfileScreen>
-    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {  // FIXED: Changed to TickerProviderStateMixin
+    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -34,6 +33,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
   Map<String, dynamic> _profileData = {};
   bool _isLoading = true;
   bool _isRefreshing = false;
+  bool _isTenantViewingAsGuest = false;
 
   final ApiService _api = ApiService();
 
@@ -79,7 +79,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
   }
 
   // ============================================================
-  // Load real profile from API
+  // FIXED: Load profile - works for BOTH guests AND tenants
   // ============================================================
   Future<void> _loadProfile() async {
     if (!mounted) return;
@@ -90,8 +90,10 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
       print('Guest profile response: $response');
       
       if (response['success'] == true && response['data'] != null) {
+        final data = response['data'];
         setState(() {
-          _profileData = response['data'];
+          _profileData = data;
+          _isTenantViewingAsGuest = data['is_tenant_viewing_as_guest'] ?? false;
           _isLoading = false;
         });
       } else {
@@ -106,7 +108,9 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
               'phone': user.phone,
               'country_code': user.countryCode,
               'is_active': user.isActive,
+              'role': user.role,
             };
+            _isTenantViewingAsGuest = user.role == 'tenant';
             _isLoading = false;
           });
         } else {
@@ -130,7 +134,9 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
             'phone': user.phone,
             'country_code': user.countryCode,
             'is_active': user.isActive,
+            'role': user.role,
           };
+          _isTenantViewingAsGuest = user.role == 'tenant';
           _isLoading = false;
         });
       } else {
@@ -153,9 +159,20 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
   }
 
   // ============================================================
-  // Edit profile with real API call
+  // FIXED: Edit profile - DISABLED for tenants viewing as guest
   // ============================================================
   void _showEditProfile() {
+    // ============================================================
+    // FIXED: Block editing if tenant is viewing as guest
+    // ============================================================
+    if (_isTenantViewingAsGuest) {
+      SnackbarHelper.showError(
+        context, 
+        'Profile editing is disabled when viewing as a guest. Please switch back to tenant mode to edit your profile.'
+      );
+      return;
+    }
+
     final TextEditingController nameController = 
         TextEditingController(text: _getString('full_name'));
     final TextEditingController emailController = 
@@ -375,7 +392,21 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
     );
   }
 
+  // ============================================================
+  // FIXED: Change Password - DISABLED for tenants viewing as guest
+  // ============================================================
   void _showChangePassword() {
+    // ============================================================
+    // FIXED: Block password change if tenant is viewing as guest
+    // ============================================================
+    if (_isTenantViewingAsGuest) {
+      SnackbarHelper.showError(
+        context, 
+        'Changing password is disabled when viewing as a guest. Please switch back to tenant mode to change your password.'
+      );
+      return;
+    }
+
     final TextEditingController currentPasswordController = TextEditingController();
     final TextEditingController newPasswordController = TextEditingController();
     final TextEditingController confirmPasswordController = TextEditingController();
@@ -507,8 +538,8 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                                     return;
                                   }
 
-                                  if (newPass.length < 6) {
-                                    SnackbarHelper.showError(context, 'Password must be at least 6 characters');
+                                  if (newPass.length < 8) {
+                                    SnackbarHelper.showError(context, 'Password must be at least 8 characters');
                                     return;
                                   }
 
@@ -739,34 +770,44 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFFFF9800).withOpacity(0.22),
-                  const Color(0xFFFF9800).withOpacity(0.06),
+                  _isTenantViewingAsGuest 
+                      ? kLivinkeyGreen.withOpacity(0.22)
+                      : const Color(0xFFFF9800).withOpacity(0.22),
+                  _isTenantViewingAsGuest 
+                      ? kLivinkeyGreen.withOpacity(0.06)
+                      : const Color(0xFFFF9800).withOpacity(0.06),
                 ],
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: const Color(0xFFFF9800).withOpacity(0.25),
+                color: _isTenantViewingAsGuest 
+                    ? kLivinkeyGreen.withOpacity(0.25)
+                    : const Color(0xFFFF9800).withOpacity(0.25),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF9800).withOpacity(0.12),
+                  color: _isTenantViewingAsGuest 
+                      ? kLivinkeyGreen.withOpacity(0.12)
+                      : const Color(0xFFFF9800).withOpacity(0.12),
                   blurRadius: 12,
                   offset: const Offset(0, 3),
                 ),
               ],
             ),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _PulsingDot(),
-                  SizedBox(width: 6),
+                  const _PulsingDot(),
+                  const SizedBox(width: 6),
                   Text(
-                    'Guest',
+                    _isTenantViewingAsGuest ? 'Tenant (Guest)' : 'Guest',
                     style: TextStyle(
-                      color: Color(0xFFFF9800),
+                      color: _isTenantViewingAsGuest 
+                          ? kLivinkeyGreen
+                          : const Color(0xFFFF9800),
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.3,
@@ -805,7 +846,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                   _buildProfileHeader(),
                   const SizedBox(height: 24),
 
-                  _buildSectionLabel('Guest Details'),
+                  _buildSectionLabel(_isTenantViewingAsGuest ? 'Tenant Details (Guest View)' : 'Guest Details'),
                   const SizedBox(height: 12),
 
                   Container(
@@ -854,12 +895,19 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                           label: 'Status',
                           value: _getString('is_active') == '1' ? 'Active' : 'Inactive',
                         ),
+                        ProfileRow(
+                          label: 'Role',
+                          value: _isTenantViewingAsGuest ? 'Tenant (Viewing as Guest)' : 'Guest',
+                        ),
                       ],
                     ),
                   ),
 
                   const SizedBox(height: 20),
 
+                  // ============================================================
+                  // FIXED: Edit Profile button - disabled for tenants viewing as guest
+                  // ============================================================
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -869,21 +917,29 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                       },
                       icon: Icon(
                         Icons.edit_rounded,
-                        color: const Color(0xFFFF9800),
+                        color: _isTenantViewingAsGuest 
+                            ? Colors.grey 
+                            : const Color(0xFFFF9800),
                         size: 20,
                       ),
-                      label: const Text(
-                        'Edit Profile',
+                      label: Text(
+                        _isTenantViewingAsGuest ? 'Edit Profile (Disabled)' : 'Edit Profile',
                         style: TextStyle(
-                          color: Color(0xFFFF9800),
+                          color: _isTenantViewingAsGuest 
+                              ? Colors.grey 
+                              : const Color(0xFFFF9800),
                           fontWeight: FontWeight.w700,
                           fontSize: 15.5,
                         ),
                       ),
                       style: OutlinedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF9800).withOpacity(0.06),
+                        backgroundColor: _isTenantViewingAsGuest 
+                            ? Colors.grey.withOpacity(0.06)
+                            : const Color(0xFFFF9800).withOpacity(0.06),
                         side: BorderSide(
-                          color: const Color(0xFFFF9800).withOpacity(0.35),
+                          color: _isTenantViewingAsGuest 
+                              ? Colors.grey.withOpacity(0.3)
+                              : const Color(0xFFFF9800).withOpacity(0.35),
                           width: 1.5,
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -896,6 +952,9 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
 
                   const SizedBox(height: 12),
 
+                  // ============================================================
+                  // FIXED: Change Password button - disabled for tenants viewing as guest
+                  // ============================================================
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -903,23 +962,31 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                         HapticFeedback.selectionClick();
                         _showChangePassword();
                       },
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.lock_outline_rounded,
-                        color: Colors.blue,
+                        color: _isTenantViewingAsGuest 
+                            ? Colors.grey 
+                            : Colors.blue,
                         size: 20,
                       ),
-                      label: const Text(
-                        'Change Password',
+                      label: Text(
+                        _isTenantViewingAsGuest ? 'Change Password (Disabled)' : 'Change Password',
                         style: TextStyle(
-                          color: Colors.blue,
+                          color: _isTenantViewingAsGuest 
+                              ? Colors.grey 
+                              : Colors.blue,
                           fontWeight: FontWeight.w700,
                           fontSize: 15.5,
                         ),
                       ),
                       style: OutlinedButton.styleFrom(
-                        backgroundColor: Colors.blue.withOpacity(0.06),
+                        backgroundColor: _isTenantViewingAsGuest 
+                            ? Colors.grey.withOpacity(0.06)
+                            : Colors.blue.withOpacity(0.06),
                         side: BorderSide(
-                          color: Colors.blue.withOpacity(0.35),
+                          color: _isTenantViewingAsGuest 
+                              ? Colors.grey.withOpacity(0.3)
+                              : Colors.blue.withOpacity(0.35),
                           width: 1.5,
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1033,18 +1100,26 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            const Color(0xFFFF9800).withOpacity(0.14),
-            const Color(0xFFFF9800).withOpacity(0.02),
+            _isTenantViewingAsGuest 
+                ? kLivinkeyGreen.withOpacity(0.14)
+                : const Color(0xFFFF9800).withOpacity(0.14),
+            _isTenantViewingAsGuest 
+                ? kLivinkeyGreen.withOpacity(0.02)
+                : const Color(0xFFFF9800).withOpacity(0.02),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: const Color(0xFFFF9800).withOpacity(0.18),
+          color: _isTenantViewingAsGuest 
+              ? kLivinkeyGreen.withOpacity(0.18)
+              : const Color(0xFFFF9800).withOpacity(0.18),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFF9800).withOpacity(0.08),
+            color: _isTenantViewingAsGuest 
+                ? kLivinkeyGreen.withOpacity(0.08)
+                : const Color(0xFFFF9800).withOpacity(0.08),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -1056,15 +1131,19 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
             width: 68,
             height: 68,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFFFF9800), Color(0xFFFFA726)],
+                colors: _isTenantViewingAsGuest 
+                    ? [kLivinkeyGreen, Color(0xFF66BB6A)]
+                    : [const Color(0xFFFF9800), const Color(0xFFFFA726)],
               ),
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF9800).withOpacity(0.4),
+                  color: _isTenantViewingAsGuest 
+                      ? kLivinkeyGreen.withOpacity(0.4)
+                      : const Color(0xFFFF9800).withOpacity(0.4),
                   blurRadius: 16,
                   offset: const Offset(0, 6),
                 ),
@@ -1113,17 +1192,23 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFF9800).withOpacity(0.16),
+                    color: _isTenantViewingAsGuest 
+                        ? kLivinkeyGreen.withOpacity(0.16)
+                        : const Color(0xFFFF9800).withOpacity(0.16),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: const Color(0xFFFF9800).withOpacity(0.2),
+                      color: _isTenantViewingAsGuest 
+                          ? kLivinkeyGreen.withOpacity(0.2)
+                          : const Color(0xFFFF9800).withOpacity(0.2),
                       width: 1,
                     ),
                   ),
-                  child: const Text(
-                    'Guest',
+                  child: Text(
+                    _isTenantViewingAsGuest ? 'Tenant (Guest View)' : 'Guest',
                     style: TextStyle(
-                      color: Color(0xFFFF9800),
+                      color: _isTenantViewingAsGuest 
+                          ? kLivinkeyGreen
+                          : const Color(0xFFFF9800),
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.2,
@@ -1508,7 +1593,7 @@ class _PulsingDotState extends State<_PulsingDot>
       opacity: Tween<double>(begin: 0.4, end: 1.0).animate(
         CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
       ),
-      child: const Icon(Icons.circle, color: Color(0xFFFF9800), size: 8),
+      child: Icon(Icons.circle, color: const Color(0xFFFF9800), size: 8),
     );
   }
 }

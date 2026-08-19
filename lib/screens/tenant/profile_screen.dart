@@ -113,20 +113,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     return value.toString();
   }
 
-  // ============================================================
-  // FIXED: Format date - correctly handles ISO datetime with timezone
-  // ============================================================
   String _formatDate(String dateStr) {
     try {
       if (dateStr.isEmpty) return '';
-      
+
       DateTime date;
-      
+
       if (dateStr.contains('T')) {
-        // ISO datetime: parse and convert to local timezone
         date = DateTime.parse(dateStr).toLocal();
       } else {
-        // YYYY-MM-DD format: parse directly
         final parts = dateStr.split('-');
         if (parts.length == 3) {
           final year = int.parse(parts[0]);
@@ -137,7 +132,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           date = DateTime.parse(dateStr);
         }
       }
-      
+
       return '${date.day} ${_monthName(date.month)}, ${date.year}';
     } catch (e) {
       return dateStr;
@@ -168,7 +163,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       if (response['success'] && response['data'] != null) {
         final data = response['data'];
         _profileData = data;
-        
+
         _tenantName = _parseString(data['full_name']);
         _tenantEmail = _parseString(data['email']);
         _pgName = _parseString(data['pg_name']);
@@ -178,15 +173,11 @@ class _ProfileScreenState extends State<ProfileScreen>
         _residency = _parseString(data['residency']);
         _profilePicture = data['profile_picture'];
 
-        // Parse numeric values from tenant_details
         _rent = _parseDouble(data['rent']);
         _securityFee = _parseDouble(data['security_fee']);
         _paymentDate = _parseInt(data['payment_date']);
         _arrivalDate = _parseString(data['arrival_date']);
         _paidTill = _parseString(data['paid_till']);
-        
-        print('Profile loaded: rent=$_rent, security_fee=$_securityFee, payment_date=$_paymentDate');
-        print('Arrival date raw: $_arrivalDate');
       }
       if (mounted) {
         await NotificationService().refresh(isTenant: true);
@@ -378,17 +369,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ProfileRow(label: 'PG', value: _pgName),
                             ProfileRow(label: 'Room No', value: _roomNumber),
                             ProfileRow(
-                              label: 'Rent', 
+                              label: 'Rent',
                               value: '₹${_rent.toStringAsFixed(2)}/month'
                             ),
                             ProfileRow(
-                              label: 'Security Fee', 
+                              label: 'Security Fee',
                               value: '₹${_securityFee.toStringAsFixed(2)}'
                             ),
                             ProfileRow(label: 'Nationality', value: _nationality),
                             ProfileRow(label: 'Gender', value: _gender.isNotEmpty ? _gender : 'Not specified'),
                             ProfileRow(
-                              label: 'Payment Date', 
+                              label: 'Payment Date',
                               value: '${_formatPaymentDate(_paymentDate)} of every month'
                             ),
                             if (_arrivalDate.isNotEmpty)
@@ -403,23 +394,17 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                       const SizedBox(height: 22),
 
+                      // ============================================================
+                      // FIXED: Simple navigation to Guest screen - NO token switching
+                      // The tenant stays logged in as tenant, just views guest UI
+                      // ============================================================
                       Center(
                         child: TextButton.icon(
-                          onPressed: () async {
+                          onPressed: () {
                             hapticFeedback();
-                            try {
-                              final success = await _api.switchToRole('guest');
-                              if (success) {
-                                Navigator.of(context).pushReplacement(
-                                  MaterialPageRoute(builder: (_) => const GuestScreen()),
-                                );
-                                SnackbarHelper.showInfo(context, 'Switched to Guest mode');
-                              } else {
-                                SnackbarHelper.showError(context, 'Failed to switch to guest');
-                              }
-                            } catch (e) {
-                              SnackbarHelper.showError(context, 'Error switching to guest');
-                            }
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const GuestScreen()),
+                            );
                           },
                           icon: Icon(Icons.switch_account_rounded, color: kLivinkeyGreen, size: 20),
                           label: Text(

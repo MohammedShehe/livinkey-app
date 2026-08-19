@@ -82,16 +82,19 @@ class TenantDrawer extends StatelessWidget {
                     },
                   ),
                   const Divider(color: Colors.white24, height: 24),
+                  // ============================================================
+                  // FIXED: Simple navigation to Guest screen - NO token switching
+                  // The tenant stays logged in as tenant, just views guest UI
+                  // ============================================================
                   _buildDrawerItem(
                     icon: Icons.switch_account_rounded,
-                    title: 'Switch to Guest',
+                    title: 'Enter as Guest',
                     color: const Color(0xFFFF9800),
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.of(context).pushReplacement(
+                      Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const GuestScreen()),
                       );
-                      SnackbarHelper.showSuccess(context, 'Switched to Guest mode');
                     },
                   ),
                   _buildDrawerItem(

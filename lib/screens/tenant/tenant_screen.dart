@@ -43,9 +43,9 @@ class TenantScreenState extends State<TenantScreen> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 0);
-    _notificationService.initialize();
+    _notificationService.initialize(isTenant: true);
     _updateUnreadCount();
-    
+
     _notificationService.notificationsStream.listen((_) {
       if (mounted) {
         _updateUnreadCount();
@@ -128,28 +128,19 @@ class TenantScreenState extends State<TenantScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            // ============================================================
+            // FIXED: Simple navigation to Guest screen - NO token switching
+            // The tenant stays logged in as tenant, just views guest UI
+            // ============================================================
             _buildQuickActionItem(
               icon: Icons.switch_account_rounded,
               color: const Color(0xFFFF9800),
               label: 'Enter as Guest',
-              onTap: () async {
+              onTap: () {
                 Navigator.pop(context);
-                try {
-                  // ============================================================
-                  // FIXED: Proper role switching with token management
-                  // ============================================================
-                  final success = await _api.switchToRole('guest');
-                  if (success) {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const GuestScreen()),
-                    );
-                    SnackbarHelper.showSuccess(context, 'Switched to Guest mode');
-                  } else {
-                    SnackbarHelper.showError(context, 'Failed to switch to guest');
-                  }
-                } catch (e) {
-                  SnackbarHelper.showError(context, 'Error switching to guest');
-                }
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const GuestScreen()),
+                );
               },
             ),
             _buildQuickActionItem(

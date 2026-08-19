@@ -32,6 +32,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
   String _greeting = 'Good Morning';
   bool _isRefreshing = false;
   bool _isLoading = true;
+  bool _isTenantViewingAsGuest = false;
 
   final ApiService _api = ApiService();
 
@@ -72,9 +73,6 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      // ============================================================
-      // FIXED: Load guest dashboard with stats
-      // ============================================================
       try {
         final dashRes = await _api.getGuestDashboard();
         print('Guest dashboard response: $dashRes');
@@ -82,22 +80,25 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
         if (dashRes['success'] == true) {
           final data = dashRes['data'];
           if (data != null && data is Map<String, dynamic>) {
-            _guestName = data['name']?.toString() ?? data['full_name']?.toString() ?? 'Guest User';
+            _guestName = data['name']?.toString() ?? 
+                        data['full_name']?.toString() ?? 
+                        'Guest User';
             _greeting = data['greeting']?.toString() ?? getTimeOfDay();
-            
-            // ============================================================
-            // FIXED: Get total PGs from dashboard response
-            // ============================================================
             _totalPGs = data['total_pgs'] ?? 0;
+            _isTenantViewingAsGuest = data['is_tenant_viewing_as_guest'] ?? false;
+            
+            print('Guest name: $_guestName');
+            print('Is tenant viewing as guest: $_isTenantViewingAsGuest');
           }
         }
       } catch (dashError) {
-        print('Dashboard error (non-critical): $dashError');
+        print('Dashboard error (fallback to generic): $dashError');
+        _guestName = 'Guest User';
+        _greeting = getTimeOfDay();
+        _totalPGs = 0;
+        _isTenantViewingAsGuest = false;
       }
 
-      // ============================================================
-      // FIXED: Load PGs
-      // ============================================================
       try {
         final pgsRes = await _api.getPublicPGs();
         print('Public PGs response: ${pgsRes['success']}, count: ${pgsRes['data'] is List ? (pgsRes['data'] as List).length : 'not a list'}');
@@ -106,14 +107,9 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
           final data = pgsRes['data'];
           if (data is List) {
             _allPgs = data.map((pg) => PgModel.fromJson(pg)).toList();
-            
-            // ============================================================
-            // FIXED: Get vacant count from response or calculate
-            // ============================================================
             _vacantCount = pgsRes['vacant_count'] ?? 
                            _allPgs.where((pg) => pg.statusText == 'Vacant').length;
             
-            // Update total PGs if not set from dashboard
             if (_totalPGs == 0) {
               _totalPGs = _allPgs.length;
             }
@@ -151,9 +147,8 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
         _totalPGs = 0;
       }
 
-      // Refresh notifications (non-critical)
       try {
-        await NotificationService().refresh(isTenant: false);
+        await NotificationService().refresh(isTenant: _isTenantViewingAsGuest);
       } catch (notifError) {
         print('Notification refresh error (non-critical): $notifError');
       }
@@ -217,9 +212,6 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
     return 50.0;
   }
 
-  // ============================================================
-  // FIXED: Get greeting based on time of day
-  // ============================================================
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour >= 5 && hour < 12) return 'Good Morning';
@@ -288,31 +280,48 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFFFF9800).withOpacity(0.22),
-                  const Color(0xFFFF9800).withOpacity(0.06),
+                  _isTenantViewingAsGuest 
+                      ? kLivinkeyGreen.withOpacity(0.22)
+                      : const Color(0xFFFF9800).withOpacity(0.22),
+                  _isTenantViewingAsGuest 
+                      ? kLivinkeyGreen.withOpacity(0.06)
+                      : const Color(0xFFFF9800).withOpacity(0.06),
                 ],
               ),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: const Color(0xFFFF9800).withOpacity(0.25),
+                color: _isTenantViewingAsGuest 
+                    ? kLivinkeyGreen.withOpacity(0.25)
+                    : const Color(0xFFFF9800).withOpacity(0.25),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF9800).withOpacity(0.12),
+                  color: _isTenantViewingAsGuest 
+                      ? kLivinkeyGreen.withOpacity(0.12)
+                      : const Color(0xFFFF9800).withOpacity(0.12),
                   blurRadius: 12,
                   offset: const Offset(0, 3),
                 ),
               ],
             ),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _PulsingDot(),
-                  SizedBox(width: 6),
-                  Text('Guest', style: TextStyle(color: Color(0xFFFF9800), fontSize: 11, fontWeight: FontWeight.w700)),
+                  _PulsingDot(isTenantViewingAsGuest: _isTenantViewingAsGuest),
+                  const SizedBox(width: 6),
+                  Text(
+                    _isTenantViewingAsGuest ? 'Tenant (Guest)' : 'Guest',
+                    style: TextStyle(
+                      color: _isTenantViewingAsGuest 
+                          ? kLivinkeyGreen
+                          : const Color(0xFFFF9800),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -374,12 +383,38 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                           ),
                         ),
                       ),
+                      if (_isTenantViewingAsGuest)
+                        Container(
+                          margin: const EdgeInsets.only(top: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: kLivinkeyGreen.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: kLivinkeyGreen.withOpacity(0.2)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: kLivinkeyGreen.withOpacity(0.8),
+                                size: 14,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Viewing as Guest',
+                                style: TextStyle(
+                                  color: kLivinkeyGreen.withOpacity(0.8),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
-                // ============================================================
-                // FIXED: Stats card with correct total PGs count
-                // ============================================================
                 Container(
                   margin: const EdgeInsets.fromLTRB(20, 14, 20, 4),
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -422,7 +457,9 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Find your perfect home',
+                              _isTenantViewingAsGuest 
+                                  ? 'Browse PGs as Guest'
+                                  : 'Find your perfect home',
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.95),
                                 fontSize: 14.5,
@@ -431,9 +468,6 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                             ),
                             const SizedBox(height: 3),
                             Text(
-                              // ============================================================
-                              // FIXED: Show actual count from _totalPGs
-                              // ============================================================
                               _totalPGs > 0 
                                   ? '$_totalPGs PGs available right now'
                                   : 'No PGs available at the moment',
@@ -448,9 +482,6 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                           ],
                         ),
                       ),
-                      // ============================================================
-                      // FIXED: Show vacancy badge
-                      // ============================================================
                       if (_vacantCount > 0)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -629,8 +660,15 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
   }
 }
 
+// ============================================================
+// FIXED: _PulsingDot receives isTenantViewingAsGuest as parameter
+// ============================================================
 class _PulsingDot extends StatefulWidget {
-  const _PulsingDot();
+  final bool isTenantViewingAsGuest;
+  
+  const _PulsingDot({
+    required this.isTenantViewingAsGuest,
+  });
 
   @override
   State<_PulsingDot> createState() => _PulsingDotState();
@@ -654,7 +692,11 @@ class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderState
       opacity: Tween<double>(begin: 0.4, end: 1.0).animate(
         CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
       ),
-      child: const Icon(Icons.circle, color: Color(0xFFFF9800), size: 8),
+      child: Icon(
+        Icons.circle, 
+        color: widget.isTenantViewingAsGuest ? kLivinkeyGreen : const Color(0xFFFF9800), 
+        size: 8
+      ),
     );
   }
 }

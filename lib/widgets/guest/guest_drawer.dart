@@ -6,8 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../common/snackbar_helper.dart';
-import '../../screens/auth/login_screen.dart';  // Fixed: Use full path from lib/
-import '../../screens/tenant/tenant_screen.dart';  // Fixed: Use full path from lib/
+import '../../screens/auth/login_screen.dart';
 
 class GuestDrawer extends StatelessWidget {
   const GuestDrawer({super.key});
@@ -55,18 +54,9 @@ class GuestDrawer extends StatelessWidget {
                     onTap: () => Navigator.pop(context),
                   ),
                   const Divider(color: Colors.white24, height: 24),
-                  _buildDrawerItem(
-                    icon: Icons.switch_account_rounded,
-                    title: 'Switch to Tenant',
-                    color: kLivinkeyGreen,
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const TenantScreen()),
-                      );
-                      SnackbarHelper.showSuccess(context, 'Switched to Tenant mode');
-                    },
-                  ),
+                  // ============================================================
+                  // FIXED: REMOVED "Switch to Tenant" - Guests should NOT see this
+                  // ============================================================
                   _buildDrawerItem(
                     icon: Icons.description_rounded,
                     title: 'Terms of Service',

@@ -39,9 +39,9 @@ class GuestScreenState extends State<GuestScreen> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 0);
-    _notificationService.initialize();
+    _notificationService.initialize(isTenant: false);
     _updateUnreadCount();
-    
+
     _notificationService.notificationsStream.listen((_) {
       if (mounted) {
         _updateUnreadCount();
@@ -120,30 +120,9 @@ class GuestScreenState extends State<GuestScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            _buildQuickActionItem(
-              icon: Icons.switch_account_rounded,
-              color: kLivinkeyGreen,
-              label: 'Switch to Tenant',
-              onTap: () async {
-                Navigator.pop(context);
-                try {
-                  // ============================================================
-                  // FIXED: Proper role switching with token management
-                  // ============================================================
-                  final success = await _api.switchToRole('tenant');
-                  if (success) {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const TenantScreen()),
-                    );
-                    SnackbarHelper.showSuccess(context, 'Switched to Tenant mode');
-                  } else {
-                    SnackbarHelper.showError(context, 'Failed to switch to tenant');
-                  }
-                } catch (e) {
-                  SnackbarHelper.showError(context, 'Error switching to tenant');
-                }
-              },
-            ),
+            // ============================================================
+            // FIXED: Removed "Switch to Tenant" - Guests should NOT see this
+            // ============================================================
             _buildQuickActionItem(
               icon: Icons.logout_rounded,
               color: Colors.red,
@@ -262,10 +241,12 @@ class GuestScreenState extends State<GuestScreen> {
             onPressed: () async {
               Navigator.pop(context);
               await _api.clearToken();
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
-              SnackbarHelper.showSuccess(context, 'Logged out successfully');
+              if (mounted) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
+                SnackbarHelper.showSuccess(context, 'Logged out successfully');
+              }
             },
             child: const Text(
               'Logout',
