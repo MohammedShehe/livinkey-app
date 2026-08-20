@@ -6,7 +6,7 @@ const Color kLivinkeyBlack = Color(0xFF000000);
 const Color kLivinkeyWhite = Color(0xFFFFFFFF);
 
 // API Configuration
-const String kApiBaseUrl = 'http://localhost:5000/api';
+const String kApiBaseUrl = 'http://192.168.0.112:5000/api';
 
 // Asset paths
 const String kLogoBaseAsset = 'assets/images/livinkey_base_white.png';
