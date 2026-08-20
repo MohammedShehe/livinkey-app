@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:livinkey/screens/tenant/documents_screen.dart';
+import 'package:livinkey/screens/tenant/maintenance_screen.dart';
+import 'package:livinkey/screens/tenant/payments_screen.dart';
 import 'package:livinkey/utils/constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/splash_screen.dart';
@@ -11,7 +14,16 @@ import 'services/api_service.dart';
 import 'models/auth_models.dart';
 import 'widgets/livinkey_logo.dart' hide kLivinkeyBlack, kLivinkeyGreen;
 
-void main() {
+// NEW: Import push notification service
+import 'services/push_notification_service.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // NEW: Initialize push notification service
+  final pushService = PushNotificationService();
+  await pushService.initialize();
+  
   runApp(const LivinkeyApp());
 }
 
@@ -23,6 +35,8 @@ class LivinkeyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Livinkey',
       debugShowCheckedModeBanner: false,
+      // NEW: Use the global navigator key for navigation from notifications
+      navigatorKey: navigatorKey,
       theme: ThemeData(
         scaffoldBackgroundColor: kLivinkeyBlack,
         colorScheme: ColorScheme.fromSeed(
@@ -33,13 +47,17 @@ class LivinkeyApp extends StatelessWidget {
       ),
       home: const AuthGuard(),
       navigatorObservers: [RouteObserver()],
+      // NEW: Named routes for navigation from notifications
+      routes: {
+        '/tenant-home': (context) => const TenantScreen(),
+        '/tenant-payments': (context) => const PaymentsScreen(),
+        '/tenant-maintenance': (context) => const MaintenanceScreen(),
+        '/tenant-documents': (context) => const DocumentsScreen(),
+      },
     );
   }
 }
 
-// ============================================================
-// FIXED: AuthGuard handles auto-login
-// ============================================================
 class AuthGuard extends StatefulWidget {
   const AuthGuard({super.key});
 
@@ -71,7 +89,6 @@ class _AuthGuardState extends State<AuthGuard> {
         try {
           final user = UserModel.fromJson(jsonDecode(userJson));
           
-          // Determine which screen to show based on role
           if (role == 'tenant' || user.role == 'tenant') {
             _initialRoute = 'tenant';
           } else if (role == 'guest' || user.role == 'guest') {
@@ -117,7 +134,6 @@ class _AuthGuardState extends State<AuthGuard> {
       );
     }
 
-    // Navigate to the appropriate screen
     switch (_initialRoute) {
       case 'tenant':
         return const TenantScreen();

@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#0D0D0D</color>
-    <!-- NEW: Notification color -->
     <color name="notification_color">#92C24A</color>
 </resources>

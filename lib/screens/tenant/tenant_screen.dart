@@ -5,6 +5,7 @@ import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../services/notification_service.dart';
 import '../../services/api_service.dart';
+import '../../services/push_notification_service.dart';
 import 'home_screen.dart';
 import 'payments_screen.dart';
 import 'maintenance_screen.dart';
@@ -260,6 +261,11 @@ class TenantScreenState extends State<TenantScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+              
+              // NEW: Remove FCM token before logout
+              final pushService = PushNotificationService();
+              await pushService.removeToken();
+              
               await _api.clearToken();
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),

@@ -1228,4 +1228,42 @@ class ApiService {
       return {'success': false, 'message': 'An error occurred. Please try again.'};
     }
   }
+
+  // ============================================================
+  // FCM TOKEN ENDPOINTS (Add to ApiService class)
+  // ============================================================
+
+  /// Update FCM token on backend
+  Future<Map<String, dynamic>> updateFCMToken(String token) async {
+    try {
+      final response = await _dio.post('/tenants/device/fcm-token', data: {
+        'fcm_token': token,
+        'device_type': Platform.isIOS ? 'ios' : 'android',
+      });
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        return e.response!.data;
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
+  /// Remove FCM token on logout
+  Future<Map<String, dynamic>> removeFCMToken({String? token}) async {
+    try {
+      final data = token != null ? {'fcm_token': token} : {};
+      final response = await _dio.delete('/tenants/device/fcm-token', data: data);
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        return e.response!.data;
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
 }

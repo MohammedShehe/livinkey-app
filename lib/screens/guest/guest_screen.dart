@@ -5,6 +5,7 @@ import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../services/notification_service.dart';
 import '../../services/api_service.dart';
+import '../../services/push_notification_service.dart';
 import 'guest_home_screen.dart';
 import 'guest_search_screen.dart';
 import 'guest_profile_screen.dart';
@@ -240,13 +241,16 @@ class GuestScreenState extends State<GuestScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+              
+              // NEW: Remove FCM token before logout
+              final pushService = PushNotificationService();
+              await pushService.removeToken();
+              
               await _api.clearToken();
-              if (mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-                SnackbarHelper.showSuccess(context, 'Logged out successfully');
-              }
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+              SnackbarHelper.showSuccess(context, 'Logged out successfully');
             },
             child: const Text(
               'Logout',

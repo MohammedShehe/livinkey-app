@@ -1,4 +1,6 @@
-# Miscellaneous
+# ============================================================
+# MISCELLANEOUS
+# ============================================================
 *.class
 *.log
 *.pyc
@@ -12,18 +14,26 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# ============================================================
+# INTELLIJ / ANDROID STUDIO
+# ============================================================
 *.iml
 *.ipr
 *.iws
 .idea/
+android/app/*.iml
+android/*.iml
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# ============================================================
+# VS CODE
+# ============================================================
+.vscode/
+.vscode/launch.json
+.vscode/settings.json
 
-# Flutter/Dart/Pub related
+# ============================================================
+# FLUTTER / DART / PUB
+# ============================================================
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
@@ -39,7 +49,77 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# ============================================================
+# ANDROID
+# ============================================================
+android/.gradle/
+android/app/.gradle/
+android/app/build/
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/local.properties
+android/app/google-services.json
+android/app/src/main/res/values/google_maps_api.xml
+
+# ============================================================
+# iOS
+# ============================================================
+ios/.symlinks/
+ios/Pods/
+ios/Podfile.lock
+ios/Runner/GeneratedPluginRegistrant.*
+ios/Runner/GoogleService-Info.plist
+ios/Runner/Info.plist
+ios/Runner/AppIcon.appiconset/
+ios/Flutter/AppFrameworkInfo.plist
+ios/Runner.xcworkspace/
+ios/Runner.xcodeproj/project.pbxproj
+
+# ============================================================
+# FIREBASE (SECURITY CRITICAL)
+# ============================================================
+google-services.json
+GoogleService-Info.plist
+firebase-service-account.json
+*.p12
+*.pem
+*.key
+*.crt
+
+# ============================================================
+# ENVIRONMENT VARIABLES
+# ============================================================
+.env
+.env.*
+!.env.example
+
+# ============================================================
+# SECRETS / CREDENTIALS
+# ============================================================
+*.secret
+secrets/
+credentials/
+keys/
+*.keystore
+*.jks
+
+# ============================================================
+# BACKUP FILES
+# ============================================================
+*.backup
+*.bak
+*.orig
+
+# ============================================================
+# OS FILES
+# ============================================================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ============================================================
+# DEPENDENCY LOCK FILES (Optional - keep or ignore)
+# ============================================================
+# pubspec.lock  # Uncomment if you want to ignore lock file

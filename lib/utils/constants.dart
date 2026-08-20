@@ -37,3 +37,6 @@ const Duration kSnackbarDuration = Duration(seconds: 2);
 const String kStorageToken = 'lk_token';
 const String kStorageUser = 'lk_user';
 const String kStorageRole = 'lk_role';
+
+// Device type
+const String kDeviceType = 'android'; // Will be overridden by platform detection
