@@ -1,9 +1,9 @@
-// lib/screens/auth/change_password_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 
 import '../../services/api_service.dart';
+import '../../services/push_notification_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../widgets/common/snackbar_helper.dart';
@@ -183,6 +183,20 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
 
       if (response['success'] == true) {
         SnackbarHelper.showSuccess(context, 'Password changed successfully!');
+
+        // ============================================================
+        // FIXED: Re-initialize push notifications after password change
+        // This ensures FCM token is saved with fresh authentication
+        // ============================================================
+        try {
+          final pushService = PushNotificationService();
+          await pushService.initialize();
+          await pushService.retryPendingToken();
+          print('✅ Push notifications re-initialized after password change');
+        } catch (pushError) {
+          print('⚠️ Push re-initialization after password change: $pushError');
+          // Don't block navigation if push fails
+        }
 
         await Future.delayed(const Duration(milliseconds: 500));
 

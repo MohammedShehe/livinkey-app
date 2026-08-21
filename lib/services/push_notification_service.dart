@@ -29,17 +29,39 @@ class PushNotificationService {
   
   final ApiService _api = ApiService();
   bool _isInitialized = false;
+  bool _isFirebaseInitialized = false;
   String? _fcmToken;
 
-  /// Initialize push notifications
+  /// ============================================================
+  /// NEW: Initialize Firebase only (called from main())
+  /// This sets up Firebase without trying to save FCM tokens
+  /// ============================================================
+  Future<void> initializeFirebaseOnly() async {
+    if (_isFirebaseInitialized) return;
+    
+    try {
+      await Firebase.initializeApp();
+      _isFirebaseInitialized = true;
+      print('✅ Firebase initialized (auth not required)');
+    } catch (e) {
+      print('❌ Firebase initialization error: $e');
+      _isFirebaseInitialized = true; // Don't block app startup
+    }
+  }
+
+  /// ============================================================
+  /// FIXED: Initialize push notifications (called AFTER login)
+  /// Now the user is authenticated when we save FCM token
+  /// ============================================================
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     try {
-      // ============================================================
-      // CRITICAL: Initialize Firebase FIRST before anything else
-      // ============================================================
-      await Firebase.initializeApp();
+      // Ensure Firebase is initialized first
+      if (!_isFirebaseInitialized) {
+        await Firebase.initializeApp();
+        _isFirebaseInitialized = true;
+      }
 
       // Skip Firebase Messaging on web
       if (!kIsWeb) {
@@ -129,16 +151,47 @@ class PushNotificationService {
     }
   }
 
-  /// Store FCM token locally and send to backend
+  /// ============================================================
+  /// FIXED: Store FCM token locally and send to backend
+  /// Now this is called AFTER login, so authentication is valid
+  /// ============================================================
   Future<void> _storeFCMToken(String token) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('fcm_token', token);
       
-      // Send to backend
-      await _api.updateFCMToken(token);
+      // ============================================================
+      // FIXED: Send to backend - user is now authenticated
+      // because this is called after login
+      // ============================================================
+      final response = await _api.updateFCMToken(token);
+      print('🟢 FCM token saved to backend: $response');
     } catch (e) {
       print('❌ Failed to store FCM token: $e');
+      // Store token locally as pending, will retry on next login
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('pending_fcm_token', token);
+    }
+  }
+
+  /// ============================================================
+  /// NEW: Retry saving pending FCM token after login
+  /// ============================================================
+  Future<void> retryPendingToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingToken = prefs.getString('pending_fcm_token');
+      
+      if (pendingToken != null && pendingToken.isNotEmpty) {
+        print('🔄 Retrying pending FCM token...');
+        final response = await _api.updateFCMToken(pendingToken);
+        if (response['success'] == true) {
+          await prefs.remove('pending_fcm_token');
+          print('✅ Pending FCM token saved successfully');
+        }
+      }
+    } catch (e) {
+      print('❌ Failed to retry pending token: $e');
     }
   }
 
@@ -303,7 +356,11 @@ class PushNotificationService {
 
   /// Get FCM token
   Future<String?> getToken() async {
-    return _fcmToken;
+    if (_fcmToken != null) return _fcmToken;
+    
+    // Try to get from SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('fcm_token');
   }
 
   /// Remove FCM token on logout
@@ -313,6 +370,8 @@ class PushNotificationService {
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('fcm_token');
+    await prefs.remove('pending_fcm_token');
+    _fcmToken = null;
   }
 }
 

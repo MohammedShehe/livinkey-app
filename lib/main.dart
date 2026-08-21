@@ -20,9 +20,13 @@ import 'services/push_notification_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // NEW: Initialize push notification service
+  // ============================================================
+  // FIXED: Initialize Firebase only, NOT the full push service
+  // PushNotificationService.initialize() will be called AFTER login
+  // so the user is authenticated when saving FCM token.
+  // ============================================================
   final pushService = PushNotificationService();
-  await pushService.initialize();
+  await pushService.initializeFirebaseOnly();
   
   runApp(const LivinkeyApp());
 }

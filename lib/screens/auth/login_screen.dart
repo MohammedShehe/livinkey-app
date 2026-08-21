@@ -1,4 +1,3 @@
-// lib/screens/auth/login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
@@ -9,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../widgets/livinkey_logo.dart';
 import '../../services/api_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/push_notification_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../widgets/common/snackbar_helper.dart';
@@ -167,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   // ============================================================
-  // FIXED: Login handler with proper role-based navigation
+  // FIXED: Login handler with push notification initialization AFTER login
   // ============================================================
   Future<void> _handleLogin() async {
     final String email = _emailController.text.trim();
@@ -204,9 +204,6 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      // ============================================================
-      // FIXED: Debug print the response
-      // ============================================================
       print('Login response success: ${response.success}');
       print('Login response token: ${response.token != null}');
       print('Login response user: ${response.user != null}');
@@ -233,9 +230,7 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      // ============================================================
-      // FIXED: Validate user role
-      // ============================================================
+      // Validate user role
       final String userRole = response.user!.role;
       print('User role after validation: "$userRole"');
 
@@ -255,6 +250,16 @@ class _LoginScreenState extends State<LoginScreen>
       await _api.setToken(response.token!, role: response.user!.role);
       await _api.saveUser(response.user!);
 
+      // ============================================================
+      // FIXED: Initialize push notifications AFTER login
+      // Now the user is authenticated and FCM token can be saved
+      // ============================================================
+      final pushService = PushNotificationService();
+      await pushService.initialize();
+      
+      // Retry pending token if any (from earlier failed attempts)
+      await pushService.retryPendingToken();
+
       // Initialize notification service
       final isTenant = response.user!.role == 'tenant';
       await NotificationService().initialize(isTenant: isTenant);
@@ -265,9 +270,7 @@ class _LoginScreenState extends State<LoginScreen>
 
       if (!mounted) return;
 
-      // ============================================================
-      // FIXED: Check must_change_password FIRST for tenants
-      // ============================================================
+      // Check must_change_password FIRST for tenants
       if (response.mustChangePassword && response.user!.role == 'tenant') {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
@@ -280,9 +283,7 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      // ============================================================
-      // FIXED: Role-based navigation with clean state
-      // ============================================================
+      // Role-based navigation
       if (response.user!.role == 'tenant') {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const TenantScreen()),
@@ -292,7 +293,6 @@ class _LoginScreenState extends State<LoginScreen>
           MaterialPageRoute(builder: (_) => const GuestScreen()),
         );
       } else {
-        // This should never happen now that we validate above
         SnackbarHelper.showError(context, 'Unknown user role: "${response.user!.role}"');
         setState(() => _isLoading = false);
       }

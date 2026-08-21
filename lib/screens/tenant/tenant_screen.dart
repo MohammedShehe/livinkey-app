@@ -47,11 +47,31 @@ class TenantScreenState extends State<TenantScreen> {
     _notificationService.initialize(isTenant: true);
     _updateUnreadCount();
 
+    // ============================================================
+    // FIXED: Ensure push notifications are initialized when tenant screen loads
+    // ============================================================
+    _initializePushNotifications();
+
     _notificationService.notificationsStream.listen((_) {
       if (mounted) {
         _updateUnreadCount();
       }
     });
+  }
+
+  // ============================================================
+  // FIXED: Initialize push notifications with retry
+  // ============================================================
+  Future<void> _initializePushNotifications() async {
+    try {
+      final pushService = PushNotificationService();
+      await pushService.initialize();
+      await pushService.retryPendingToken();
+      print('✅ Push notifications initialized on tenant screen');
+    } catch (e) {
+      print('⚠️ Push notification init on tenant screen: $e');
+      // Don't block UI if push fails
+    }
   }
 
   @override
@@ -217,6 +237,9 @@ class TenantScreenState extends State<TenantScreen> {
     );
   }
 
+  // ============================================================
+  // FIXED: Logout with push token cleanup
+  // ============================================================
   void _handleLogout() {
     showDialog(
       context: context,
