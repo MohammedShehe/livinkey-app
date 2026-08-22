@@ -161,7 +161,6 @@ class _PaymentsScreenState extends State<PaymentsScreen>
         }
       }
     } catch (e) {
-      print('Image picker error: $e');
       if (mounted) {
         SnackbarHelper.showError(context, 'Failed to pick image');
       }
@@ -1440,7 +1439,6 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     final encodedToken = Uri.encodeComponent(token);
     final receiptUrl = '${kApiBaseUrl}/tenant-payments/receipt/$type/${payment.id}/download?token=$encodedToken';
     
-    print('Opening receipt URL: $receiptUrl');
 
     final uri = Uri.parse(receiptUrl);
     
@@ -1462,7 +1460,6 @@ class _PaymentsScreenState extends State<PaymentsScreen>
       }
     }
   } catch (e) {
-    print('Receipt download error: $e');
     SnackbarHelper.showError(context, 'Failed to open receipt');
   } finally {
     if (mounted) {

@@ -75,7 +75,6 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
     try {
       try {
         final dashRes = await _api.getGuestDashboard();
-        print('Guest dashboard response: $dashRes');
         
         if (dashRes['success'] == true) {
           final data = dashRes['data'];
@@ -87,12 +86,9 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
             _totalPGs = data['total_pgs'] ?? 0;
             _isTenantViewingAsGuest = data['is_tenant_viewing_as_guest'] ?? false;
             
-            print('Guest name: $_guestName');
-            print('Is tenant viewing as guest: $_isTenantViewingAsGuest');
           }
         }
       } catch (dashError) {
-        print('Dashboard error (fallback to generic): $dashError');
         _guestName = 'Guest User';
         _greeting = getTimeOfDay();
         _totalPGs = 0;
@@ -101,7 +97,6 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
 
       try {
         final pgsRes = await _api.getPublicPGs();
-        print('Public PGs response: ${pgsRes['success']}, count: ${pgsRes['data'] is List ? (pgsRes['data'] as List).length : 'not a list'}');
         
         if (pgsRes['success'] == true && pgsRes['data'] != null) {
           final data = pgsRes['data'];
@@ -116,7 +111,6 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
             
             _applyFilter();
           } else {
-            print('PG data is not a List: ${data.runtimeType}');
             if (data is Map<String, dynamic> && data['data'] is List) {
               final innerData = data['data'] as List;
               _allPgs = innerData.map((pg) => PgModel.fromJson(pg)).toList();
@@ -133,14 +127,12 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
             }
           }
         } else {
-          print('PG API returned error: ${pgsRes['message']}');
           _allPgs = [];
           _filteredPgs = [];
           _vacantCount = 0;
           _totalPGs = 0;
         }
       } catch (pgsError) {
-        print('PG loading error: $pgsError');
         _allPgs = [];
         _filteredPgs = [];
         _vacantCount = 0;
@@ -150,7 +142,6 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
       try {
         await NotificationService().refresh(isTenant: _isTenantViewingAsGuest);
       } catch (notifError) {
-        print('Notification refresh error (non-critical): $notifError');
       }
       
       if (_allPgs.isEmpty && _totalPGs == 0) {
@@ -158,7 +149,6 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
       }
       
     } catch (e) {
-      print('GuestHomeScreen _loadData error: $e');
       if (mounted) {
         SnackbarHelper.showError(context, 'Failed to load data');
       }

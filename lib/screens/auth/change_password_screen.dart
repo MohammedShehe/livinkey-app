@@ -192,9 +192,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
           final pushService = PushNotificationService();
           await pushService.initialize();
           await pushService.retryPendingToken();
-          print('✅ Push notifications re-initialized after password change');
         } catch (pushError) {
-          print('⚠️ Push re-initialization after password change: $pushError');
           // Don't block navigation if push fails
         }
 
@@ -214,7 +212,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
         );
       }
     } catch (e) {
-      print('Change password error: $e');
       SnackbarHelper.showError(
         context,
         'An error occurred. Please try again.',

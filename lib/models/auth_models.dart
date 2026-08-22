@@ -121,13 +121,10 @@ class UserModel {
       
       final decoded = utf8.decode(base64Url.decode(normalized));
       final Map<String, dynamic> jsonData = jsonDecode(decoded);
-      print('JWT Payload decoded: $jsonData');
       
       final role = jsonData['role']?.toString().toLowerCase() ?? '';
-      print('Role from JWT: "$role"');
       return role;
     } catch (e) {
-      print('Error decoding JWT: $e');
       return '';
     }
   }
@@ -140,10 +137,8 @@ class UserModel {
     }
     
     if (roleValue.isEmpty) {
-      print('WARNING: Could not determine role from response or token');
     }
     
-    print('UserModel.fromJson - final role: "$roleValue"');
 
     return UserModel(
       id: json['id'] ?? 0,
@@ -212,7 +207,6 @@ class LoginResponse {
   });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
-    print('LoginResponse.fromJson received: $json');
 
     UserModel? user;
     final String? token = json['token'];
@@ -221,9 +215,7 @@ class LoginResponse {
       try {
         final userData = json['user'] as Map<String, dynamic>;
         user = UserModel.fromJson(userData, token: token);
-        print('User parsed, role: "${user?.role}"');
       } catch (e) {
-        print('Error parsing user: $e');
         try {
           final userData = json['user'] as Map<String, dynamic>;
           String roleFromToken = '';
@@ -254,9 +246,7 @@ class LoginResponse {
             isActive: userData['is_active'] ?? userData['isActive'] ?? true,
             createdAt: userData['created_at'],
           );
-          print('Fallback user parsed, role: "${user?.role}"');
         } catch (e2) {
-          print('Fallback parsing also failed: $e2');
         }
       }
     }

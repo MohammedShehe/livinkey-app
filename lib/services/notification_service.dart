@@ -36,7 +36,6 @@ class NotificationService {
         await _refreshGuest();
       }
     } catch (e) {
-      print('Notification refresh error: $e');
     }
   }
 
@@ -84,7 +83,6 @@ class NotificationService {
         }
       }
     } catch (e) {
-      print('_refreshTenant error: $e');
     }
   }
 
@@ -109,7 +107,6 @@ class NotificationService {
         }
       }
     } catch (e) {
-      print('_refreshGuest error: $e');
     }
   }
 
@@ -141,7 +138,6 @@ class NotificationService {
       }
       await refresh(isTenant: isTenant);
     } catch (e) {
-      print('markAsRead error: $e');
     }
   }
 
@@ -170,7 +166,6 @@ class NotificationService {
       _notificationsController.add(List.from(_notifications));
       await refresh(isTenant: isTenant);
     } catch (e) {
-      print('markAllAsRead error: $e');
     }
   }
 
@@ -179,7 +174,6 @@ class NotificationService {
       _notifications.removeWhere((n) => n.id == id);
       _notificationsController.add(List.from(_notifications));
     } catch (e) {
-      print('deleteNotification error: $e');
     }
   }
 

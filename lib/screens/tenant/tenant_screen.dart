@@ -67,9 +67,7 @@ class TenantScreenState extends State<TenantScreen> {
       final pushService = PushNotificationService();
       await pushService.initialize();
       await pushService.retryPendingToken();
-      print('✅ Push notifications initialized on tenant screen');
     } catch (e) {
-      print('⚠️ Push notification init on tenant screen: $e');
       // Don't block UI if push fails
     }
   }

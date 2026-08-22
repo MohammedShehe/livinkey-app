@@ -24,8 +24,7 @@ class ApiService {
     _token = prefs.getString(kStorageToken);
     _role = prefs.getString(kStorageRole);
     
-    print('ApiService.init - token present: ${_token != null}');
-    print('ApiService.init - role: $_role');
+
 
     _dio = Dio(BaseOptions(
       baseUrl: kApiBaseUrl,
@@ -49,9 +48,7 @@ class ApiService {
         
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
-          print('ApiService.onRequest - Added Authorization header (token from SharedPreferences)');
         } else {
-          print('ApiService.onRequest - NO TOKEN available');
         }
         
         options.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
@@ -63,7 +60,6 @@ class ApiService {
         return handler.next(response);
       },
       onError: (error, handler) async {
-        print('ApiService.onError - Status: ${error.response?.statusCode}, Message: ${error.message}');
         if (error.response?.statusCode == 401 || error.response?.statusCode == 403) {
           await _handleUnauthorized();
         }
@@ -73,12 +69,10 @@ class ApiService {
   }
 
   Future<void> _handleUnauthorized() async {
-    print('ApiService._handleUnauthorized - Clearing token due to 401/403');
     await clearToken();
   }
 
   Future<void> setToken(String token, {String? role}) async {
-    print('ApiService.setToken - Setting token (length: ${token.length}), role: $role');
     _token = token;
     _role = role;
     final prefs = await SharedPreferences.getInstance();
@@ -86,15 +80,12 @@ class ApiService {
     if (role != null) {
       await prefs.setString(kStorageRole, role);
     }
-    print('ApiService.setToken - Token saved to SharedPreferences');
     
     // Verify token was saved
     final savedToken = prefs.getString(kStorageToken);
-    print('ApiService.setToken - Verification: token saved = ${savedToken != null}');
   }
 
   Future<void> clearToken() async {
-    print('ApiService.clearToken - Clearing token and user data');
     _token = null;
     _role = null;
     final prefs = await SharedPreferences.getInstance();
@@ -107,7 +98,6 @@ class ApiService {
     // Always get from SharedPreferences to ensure freshness
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString(kStorageToken);
-    print('ApiService.getToken - Retrieved token from SharedPreferences: ${_token != null}');
     return _token;
   }
 
@@ -120,7 +110,6 @@ class ApiService {
     final prefs = await SharedPreferences.getInstance();
     final userJson = jsonEncode(user.toJson());
     await prefs.setString(kStorageUser, userJson);
-    print('ApiService.saveUser - User saved with role: ${user.role}');
   }
 
   Future<UserModel?> getUser() async {
@@ -130,7 +119,6 @@ class ApiService {
       try {
         return UserModel.fromJson(jsonDecode(userJson));
       } catch (e) {
-        print('ApiService.getUser - Error parsing user: $e');
         return null;
       }
     }
@@ -142,7 +130,6 @@ class ApiService {
     final token = prefs.getString(kStorageToken);
     final user = prefs.getString(kStorageUser);
     final loggedIn = token != null && token.isNotEmpty && user != null;
-    print('ApiService.isLoggedIn - $loggedIn');
     return loggedIn;
   }
 
@@ -162,10 +149,8 @@ class ApiService {
       await prefs.setString(kStorageUser, jsonEncode(user));
       await prefs.setString(kStorageRole, newRole);
       _role = newRole;
-      print('ApiService.switchToRole - Switched to role: $newRole');
       return true;
     } catch (e) {
-      print('ApiService.switchToRole - Error: $e');
       return false;
     }
   }
@@ -220,7 +205,6 @@ class ApiService {
       final response = await _dio.get('/tenants/home');
       return response.data;
     } on DioException catch (e) {
-      print('getTenantHome error: ${e.message}');
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
@@ -237,10 +221,8 @@ class ApiService {
         'email': email,
         'password': password,
       });
-      print('Tenant login response status: ${response.statusCode}');
       return LoginResponse.fromJson(response.data);
     } on DioException catch (e) {
-      print('Tenant login DioException: ${e.message}');
       if (e.response != null && e.response!.data != null) {
         return LoginResponse.fromJson(e.response!.data);
       }
@@ -249,7 +231,6 @@ class ApiService {
         message: 'Network error. Please try again.',
       );
     } catch (e) {
-      print('Tenant login error: $e');
       return LoginResponse(
         success: false,
         message: 'An error occurred. Please try again.',
@@ -264,11 +245,8 @@ class ApiService {
         'email': email,
         'password': password,
       });
-      print('Guest login response status: ${response.statusCode}');
-      print('Guest login response data: ${response.data}');
       return LoginResponse.fromJson(response.data);
     } on DioException catch (e) {
-      print('Guest login DioException: ${e.message}');
       if (e.response != null && e.response!.data != null) {
         return LoginResponse.fromJson(e.response!.data);
       }
@@ -277,7 +255,6 @@ class ApiService {
         message: 'Network error. Please try again.',
       );
     } catch (e) {
-      print('Guest login error: $e');
       return LoginResponse(
         success: false,
         message: 'An error occurred. Please try again.',
@@ -470,10 +447,8 @@ class ApiService {
           },
         ),
       );
-      print('Guest dashboard response status: ${response.statusCode}');
       return response.data ?? {'success': false, 'message': 'Empty response'};
     } on DioException catch (e) {
-      print('getGuestDashboard DioException: ${e.message}, status: ${e.response?.statusCode}');
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
@@ -482,7 +457,6 @@ class ApiService {
       }
       return {'success': false, 'message': 'Network error. Please try again.'};
     } catch (e) {
-      print('getGuestDashboard error: $e');
       return {'success': false, 'message': 'An error occurred. Please try again.'};
     }
   }
@@ -553,10 +527,8 @@ class ApiService {
           },
         ),
       );
-      print('Public PGs response status: ${response.statusCode}');
       return response.data ?? {'success': false, 'message': 'Empty response', 'data': []};
     } on DioException catch (e) {
-      print('getPublicPGs DioException: ${e.message}, status: ${e.response?.statusCode}');
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
@@ -565,7 +537,6 @@ class ApiService {
       }
       return {'success': false, 'message': 'Network error. Please try again.', 'data': []};
     } catch (e) {
-      print('getPublicPGs error: $e');
       return {'success': false, 'message': 'An error occurred. Please try again.', 'data': []};
     }
   }
@@ -717,7 +688,6 @@ class ApiService {
 
         formData.files.add(MapEntry('payment_screenshot', file));
       } catch (fileError) {
-        print('Error creating file part: $fileError');
         return {'success': false, 'message': 'Failed to process file: ${fileError.toString()}'};
       }
 
@@ -733,7 +703,6 @@ class ApiService {
       
       return response.data;
     } on DioException catch (e) {
-      print('DioException in submitPaymentProof: ${e.message}');
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
@@ -746,7 +715,6 @@ class ApiService {
       }
       return {'success': false, 'message': 'Network error. Please try again.'};
     } catch (e) {
-      print('Unexpected error in submitPaymentProof: $e');
       return {'success': false, 'message': 'An error occurred. Please try again.'};
     }
   }
@@ -859,7 +827,6 @@ class ApiService {
 
           formData.files.add(MapEntry('image', file));
         } catch (fileError) {
-          print('Error creating file part: $fileError');
           return {'success': false, 'message': 'Failed to process file: ${fileError.toString()}'};
         }
       }
@@ -995,7 +962,6 @@ class ApiService {
 
         formData.files.add(MapEntry('document', file));
       } catch (fileError) {
-        print('Error creating file part: $fileError');
         return {'success': false, 'message': 'Failed to process file: ${fileError.toString()}'};
       }
 
@@ -1011,7 +977,6 @@ class ApiService {
       
       return response.data;
     } on DioException catch (e) {
-      print('DioException in uploadDocument: ${e.message}');
       if (e.response != null && e.response!.data != null) {
         if (e.response!.data is Map && (e.response!.data as Map).containsKey('message')) {
           return e.response!.data;
@@ -1038,7 +1003,6 @@ class ApiService {
       }
       return {'success': false, 'message': 'Network error: ${e.message}'};
     } catch (e) {
-      print('Unexpected error in uploadDocument: $e');
       return {'success': false, 'message': 'An error occurred. Please try again.'};
     }
   }

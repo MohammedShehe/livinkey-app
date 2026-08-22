@@ -477,7 +477,6 @@ class _SignUpScreenState extends State<SignUpScreen>
         SnackbarHelper.showError(context, response['message'] ?? 'Registration failed');
       }
     } catch (e) {
-      print('Sign up error: $e');
       SnackbarHelper.showError(context, 'An error occurred. Please try again.');
     } finally {
       if (mounted) {

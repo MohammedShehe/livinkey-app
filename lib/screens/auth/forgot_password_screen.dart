@@ -185,7 +185,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         SnackbarHelper.showError(context, response['message'] ?? 'Failed to send OTP');
       }
     } catch (e) {
-      print('Send OTP error: $e');
       SnackbarHelper.showError(context, 'An error occurred. Please try again.');
     } finally {
       if (mounted) {
@@ -219,7 +218,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         SnackbarHelper.showError(context, response['message'] ?? 'Failed to resend OTP');
       }
     } catch (e) {
-      print('Resend OTP error: $e');
       SnackbarHelper.showError(context, 'An error occurred. Please try again.');
     } finally {
       if (mounted) {
@@ -262,7 +260,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         SnackbarHelper.showError(context, response.message);
       }
     } catch (e) {
-      print('Verify OTP error: $e');
       SnackbarHelper.showError(context, 'An error occurred. Please try again.');
     } finally {
       if (mounted) {
@@ -324,7 +321,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         SnackbarHelper.showError(context, response['message'] ?? 'Failed to reset password');
       }
     } catch (e) {
-      print('Reset password error: $e');
       SnackbarHelper.showError(context, 'An error occurred. Please try again.');
     } finally {
       if (mounted) {

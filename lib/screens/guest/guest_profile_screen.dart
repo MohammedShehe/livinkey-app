@@ -87,7 +87,6 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
     
     try {
       final response = await _api.getGuestProfile();
-      print('Guest profile response: $response');
       
       if (response['success'] == true && response['data'] != null) {
         final data = response['data'];
@@ -122,7 +121,6 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
         }
       }
     } catch (e) {
-      print('Load profile error: $e');
       // Try to get from local storage as fallback
       final user = await _api.getUser();
       if (user != null) {

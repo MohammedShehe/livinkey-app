@@ -42,9 +42,7 @@ class PushNotificationService {
     try {
       await Firebase.initializeApp();
       _isFirebaseInitialized = true;
-      print('✅ Firebase initialized (auth not required)');
     } catch (e) {
-      print('❌ Firebase initialization error: $e');
       _isFirebaseInitialized = true; // Don't block app startup
     }
   }
@@ -77,13 +75,10 @@ class PushNotificationService {
         // Setup message handlers
         await _setupMessageHandlers();
       } else {
-        print('⚠️ Firebase Messaging skipped on web platform');
       }
 
       _isInitialized = true;
-      print('✅ Push Notification Service initialized');
     } catch (e) {
-      print('❌ Push Notification initialization error: $e');
       _isInitialized = true; // Don't block app startup
     }
   }
@@ -101,9 +96,7 @@ class PushNotificationService {
     );
 
     if (settings.authorizationStatus != AuthorizationStatus.authorized) {
-      print('⚠️ Notification permissions not granted');
     } else {
-      print('✅ Notification permissions granted');
     }
 
     if (Platform.isIOS) {
@@ -143,11 +136,9 @@ class PushNotificationService {
     try {
       _fcmToken = await _fcm.getToken();
       if (_fcmToken != null) {
-        print('✅ FCM Token: $_fcmToken');
         await _storeFCMToken(_fcmToken!);
       }
     } catch (e) {
-      print('❌ Failed to get FCM token: $e');
     }
   }
 
@@ -165,9 +156,7 @@ class PushNotificationService {
       // because this is called after login
       // ============================================================
       final response = await _api.updateFCMToken(token);
-      print('🟢 FCM token saved to backend: $response');
     } catch (e) {
-      print('❌ Failed to store FCM token: $e');
       // Store token locally as pending, will retry on next login
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pending_fcm_token', token);
@@ -183,15 +172,12 @@ class PushNotificationService {
       final pendingToken = prefs.getString('pending_fcm_token');
       
       if (pendingToken != null && pendingToken.isNotEmpty) {
-        print('🔄 Retrying pending FCM token...');
         final response = await _api.updateFCMToken(pendingToken);
         if (response['success'] == true) {
           await prefs.remove('pending_fcm_token');
-          print('✅ Pending FCM token saved successfully');
         }
       }
     } catch (e) {
-      print('❌ Failed to retry pending token: $e');
     }
   }
 
@@ -199,7 +185,6 @@ class PushNotificationService {
   Future<void> _setupMessageHandlers() async {
     // 1. Foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('📱 Foreground message received');
       _handleForegroundMessage(message);
     });
 
@@ -209,19 +194,16 @@ class PushNotificationService {
     // 3. App opened from terminated state
     RemoteMessage? initialMessage = await _fcm.getInitialMessage();
     if (initialMessage != null) {
-      print('📱 App opened from terminated state');
       _handleNotificationData(initialMessage.data);
     }
 
     // 4. App opened from background
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      print('📱 App opened from background');
       _handleNotificationData(message.data);
     });
 
     // 5. Token refresh
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
-      print('🔄 FCM Token refreshed');
       _storeFCMToken(newToken);
     });
   }
@@ -327,7 +309,6 @@ class PushNotificationService {
     try {
       // Skip badge update on iOS (handled natively by APNs)
       if (Platform.isIOS) {
-        print('⚠️ App badge handled by iOS system');
         return;
       }
 
@@ -336,12 +317,10 @@ class PushNotificationService {
       try {
         isSupported = await AppBadgePlus.isSupported();
       } catch (e) {
-        print('⚠️ App badge not supported: $e');
         return;
       }
 
       if (!isSupported) {
-        print('⚠️ App badge not supported on this device');
         return;
       }
 
@@ -350,7 +329,6 @@ class PushNotificationService {
 
       await AppBadgePlus.updateBadge(unreadCount);
     } catch (e) {
-      print('❌ Failed to update app badge: $e');
     }
   }
 
@@ -379,7 +357,6 @@ class PushNotificationService {
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  print('📱 Background message received');
   
   final FlutterLocalNotificationsPlugin localNotifications = 
       FlutterLocalNotificationsPlugin();

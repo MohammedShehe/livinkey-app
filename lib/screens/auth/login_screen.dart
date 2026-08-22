@@ -204,11 +204,6 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      print('Login response success: ${response.success}');
-      print('Login response token: ${response.token != null}');
-      print('Login response user: ${response.user != null}');
-      print('Login response user role: ${response.user?.role}');
-      print('Login response mustChangePassword: ${response.mustChangePassword}');
 
       // Check if login was successful
       if (!response.success) {
@@ -232,7 +227,6 @@ class _LoginScreenState extends State<LoginScreen>
 
       // Validate user role
       final String userRole = response.user!.role;
-      print('User role after validation: "$userRole"');
 
       if (userRole.isEmpty) {
         SnackbarHelper.showError(context, 'Invalid user role: Role is empty');
@@ -298,7 +292,6 @@ class _LoginScreenState extends State<LoginScreen>
       }
 
     } catch (e) {
-      print('Login error: $e');
       SnackbarHelper.showError(context, 'An error occurred. Please try again.');
       setState(() => _isLoading = false);
     } finally {
