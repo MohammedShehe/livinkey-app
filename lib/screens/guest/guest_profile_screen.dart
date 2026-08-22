@@ -1004,14 +1004,14 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                     icon: Icons.description_rounded,
                     title: 'Terms of Service',
                     onTap: () {
-                      SnackbarHelper.show(context, 'Terms of Service');
+                      _launchUrl(kTermsUrl);
                     },
                   ),
                   _buildLinkItem(
                     icon: Icons.privacy_tip_rounded,
                     title: 'Privacy Policy',
                     onTap: () {
-                      SnackbarHelper.show(context, 'Privacy Policy');
+                      _launchUrl(kPrivacyUrl);
                     },
                   ),
                   _buildLinkItem(

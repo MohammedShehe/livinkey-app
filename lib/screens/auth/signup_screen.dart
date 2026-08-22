@@ -1,7 +1,7 @@
-// lib/screens/auth/signup_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/api_service.dart';
 import '../../utils/constants.dart';
@@ -352,14 +352,27 @@ class _SignUpScreenState extends State<SignUpScreen>
     _termsRecognizer = TapGestureRecognizer()
       ..onTap = () {
         hapticSelection();
-        SnackbarHelper.show(context, 'Terms of Services');
+        _launchUrl(kTermsUrl);
       };
 
     _privacyRecognizer = TapGestureRecognizer()
       ..onTap = () {
         hapticSelection();
-        SnackbarHelper.show(context, 'Privacy Policy');
+        _launchUrl(kPrivacyUrl);
       };
+  }
+
+  Future<void> _launchUrl(String url) async {
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackbarHelper.showError(context, 'Could not open the link.');
+      }
+    }
   }
 
   @override

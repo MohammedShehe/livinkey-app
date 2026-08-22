@@ -54,18 +54,15 @@ class GuestDrawer extends StatelessWidget {
                     onTap: () => Navigator.pop(context),
                   ),
                   const Divider(color: Colors.white24, height: 24),
-                  // ============================================================
-                  // FIXED: REMOVED "Switch to Tenant" - Guests should NOT see this
-                  // ============================================================
                   _buildDrawerItem(
                     icon: Icons.description_rounded,
                     title: 'Terms of Service',
-                    onTap: () => SnackbarHelper.show(context, 'Terms of Service'),
+                    onTap: () => _launchUrl(context, kTermsUrl),
                   ),
                   _buildDrawerItem(
                     icon: Icons.privacy_tip_rounded,
                     title: 'Privacy Policy',
-                    onTap: () => SnackbarHelper.show(context, 'Privacy Policy'),
+                    onTap: () => _launchUrl(context, kPrivacyUrl),
                   ),
                   _buildDrawerItem(
                     icon: Icons.contact_support_rounded,
@@ -142,6 +139,19 @@ class GuestDrawer extends StatelessWidget {
       hoverColor: const Color(0xFFFF9800).withOpacity(0.05),
       splashColor: const Color(0xFFFF9800).withOpacity(0.1),
     );
+  }
+
+  Future<void> _launchUrl(BuildContext context, String url) async {
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {
+      if (context.mounted) {
+        SnackbarHelper.showError(context, 'Unable to open link');
+      }
+    }
   }
 
   void _showContactOptions(BuildContext context) {
@@ -246,19 +256,6 @@ class GuestDrawer extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _launchUrl(BuildContext context, String url) async {
-    try {
-      final Uri uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (_) {
-      if (context.mounted) {
-        SnackbarHelper.showError(context, 'Unable to open link');
-      }
-    }
   }
 
   Future<void> _launchEmail(BuildContext context) async {

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
-import '../widgets/livinkey_logo.dart';
+import 'package:url_launcher/url_launcher.dart';
+// FIXED: Import livinkey_logo with a prefix to avoid name conflicts
+import '../widgets/livinkey_logo.dart' as logo;
 import 'auth/login_screen.dart';
 import '../services/audio_service.dart';
+import '../utils/constants.dart';
+import '../widgets/common/snackbar_helper.dart';
 
 class GetStartedScreen extends StatefulWidget {
   const GetStartedScreen({super.key});
@@ -36,8 +40,6 @@ class _GetStartedScreenState extends State<GetStartedScreen>
       vsync: this,
     );
 
-    // Drives the ring+dot's idle up/down bounce above the key. It repeats
-    // forever (reverse: true), so the value oscillates 0 -> 1 -> 0 -> 1 ...
     _logoController = AnimationController(
       duration: const Duration(milliseconds: 900),
       vsync: this,
@@ -72,10 +74,12 @@ class _GetStartedScreenState extends State<GetStartedScreen>
     _termsRecognizer = TapGestureRecognizer()
       ..onTap = () {
         HapticFeedback.selectionClick();
+        _launchUrl(kTermsUrl);
       };
     _privacyRecognizer = TapGestureRecognizer()
       ..onTap = () {
         HapticFeedback.selectionClick();
+        _launchUrl(kPrivacyUrl);
       };
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -84,6 +88,23 @@ class _GetStartedScreenState extends State<GetStartedScreen>
         if (mounted) _logoController.repeat(reverse: true);
       });
     });
+  }
+
+  Future<void> _launchUrl(String url) async {
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          SnackbarHelper.showError(context, 'Could not open the link.');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackbarHelper.showError(context, 'Could not open the link.');
+      }
+    }
   }
 
   Future<void> _playBackgroundMusic() async {
@@ -100,9 +121,7 @@ class _GetStartedScreenState extends State<GetStartedScreen>
     super.dispose();
   }
 
-  // Prevent back navigation from GetStartedScreen
   Future<bool> _onWillPop() async {
-    // Show exit dialog when back button is pressed on GetStartedScreen
     return await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -163,13 +182,6 @@ class _GetStartedScreenState extends State<GetStartedScreen>
   @override
   Widget build(BuildContext context) {
     final Size screenSize = MediaQuery.of(context).size;
-
-    // Responsive logo width: the old hardcoded `width: 280` (plus its own
-    // container's horizontal padding of 40 and the outer Padding's 56)
-    // needed ~376px of screen width to avoid clipping/overflow — wider
-    // than a lot of small phones (iPhone SE / small Android = 320-360px).
-    // Scaling off screen width and clamping fixes both ends: it shrinks
-    // on narrow phones and stops growing past a sensible cap on tablets.
     final double logoWidth = (screenSize.width * 0.62).clamp(180.0, 320.0);
 
     return WillPopScope(
@@ -191,18 +203,6 @@ class _GetStartedScreenState extends State<GetStartedScreen>
                   child: AnimatedBuilder(
                     animation: _mainController,
                     builder: (context, _) {
-                      // SingleChildScrollView + ConstrainedBox: the
-                      // original Column relied on Spacer()s to fill
-                      // exactly the available height. That works fine on
-                      // a typical phone, but on short screens (landscape
-                      // phones, older small devices, or with larger
-                      // system font/accessibility scaling turned up) the
-                      // fixed-height content (description text, button,
-                      // terms) can exceed the viewport and throw a
-                      // RenderFlex overflow. Wrapping it in a scroll view
-                      // with a minHeight constraint keeps the original
-                      // "centered, spaced out" look on normal screens but
-                      // lets it scroll instead of overflow on short ones.
                       return SingleChildScrollView(
                         physics: const ClampingScrollPhysics(),
                         padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -239,7 +239,7 @@ class _GetStartedScreenState extends State<GetStartedScreen>
                                         width: 1,
                                       ),
                                     ),
-                                    child: LivinkeyLogoKeyBounce(
+                                    child: logo.LivinkeyLogoKeyBounce(
                                       bounceAnimation: _keyBounceAnimation,
                                       width: logoWidth,
                                     ),
@@ -325,7 +325,7 @@ class _GetStartedScreenState extends State<GetStartedScreen>
                                         width: 1,
                                       ),
                                     ),
-                                   child: Text(
+                                    child: Text(
                                       'We believe that finding a home is just the beginning of your journey. Livinkey is a comprehensive platform designed to transform the way you discover, book, and manage your living space.\n\nWhether you\'re a student, professional, or anyone seeking a comfortable stay, Livinkey makes your entire living experience seamless and stress-free.',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
@@ -410,7 +410,6 @@ class _GetStartedScreenState extends State<GetStartedScreen>
           onPressed: () {
             HapticFeedback.lightImpact();
             AudioService.stopBackgroundMusic();
-            // 🔥 KEY CHANGE: Use pushReplacement to prevent going back
             Navigator.of(context).pushReplacement(
               PageRouteBuilder(
                 pageBuilder: (context, animation, secondaryAnimation) =>

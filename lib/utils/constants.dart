@@ -6,7 +6,7 @@ const Color kLivinkeyBlack = Color(0xFF000000);
 const Color kLivinkeyWhite = Color(0xFFFFFFFF);
 
 // API Configuration
-const String kApiBaseUrl = 'http://192.168.0.112:5000/api';
+const String kApiBaseUrl = 'https://livinkey-backend-e15s.onrender.com/api';
 
 // Asset paths
 const String kLogoBaseAsset = 'assets/images/livinkey_base_white.png';
@@ -27,6 +27,12 @@ const String kInstagramUrl = 'https://www.instagram.com/livinkey';
 const String kFacebookUrl = 'https://www.facebook.com/livin.key.9';
 const String kGoogleUrl = 'https://share.google/ktGKY5w8NCakvEo6u';
 const String kEmailUrl = 'mailto:livinkey@gmail.com';
+
+// ============================================================
+// TERMS AND PRIVACY POLICY LINKS
+// ============================================================
+const String kTermsUrl = 'https://admin.livinkey.com/terms.html';
+const String kPrivacyUrl = 'https://admin.livinkey.com/privacy.html';
 
 // Animation durations
 const Duration kFadeDuration = Duration(milliseconds: 600);

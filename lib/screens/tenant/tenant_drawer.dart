@@ -82,10 +82,6 @@ class TenantDrawer extends StatelessWidget {
                     },
                   ),
                   const Divider(color: Colors.white24, height: 24),
-                  // ============================================================
-                  // FIXED: Simple navigation to Guest screen - NO token switching
-                  // The tenant stays logged in as tenant, just views guest UI
-                  // ============================================================
                   _buildDrawerItem(
                     icon: Icons.switch_account_rounded,
                     title: 'Enter as Guest',
@@ -100,12 +96,12 @@ class TenantDrawer extends StatelessWidget {
                   _buildDrawerItem(
                     icon: Icons.description_rounded,
                     title: 'Terms of Service',
-                    onTap: () => SnackbarHelper.show(context, 'Terms of Service'),
+                    onTap: () => _launchUrl(context, kTermsUrl),
                   ),
                   _buildDrawerItem(
                     icon: Icons.privacy_tip_rounded,
                     title: 'Privacy Policy',
-                    onTap: () => SnackbarHelper.show(context, 'Privacy Policy'),
+                    onTap: () => _launchUrl(context, kPrivacyUrl),
                   ),
                   _buildDrawerItem(
                     icon: Icons.support_agent_rounded,
@@ -177,6 +173,19 @@ class TenantDrawer extends StatelessWidget {
       hoverColor: kLivinkeyGreen.withOpacity(0.05),
       splashColor: kLivinkeyGreen.withOpacity(0.1),
     );
+  }
+
+  Future<void> _launchUrl(BuildContext context, String url) async {
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {
+      if (context.mounted) {
+        SnackbarHelper.showError(context, 'Unable to open link');
+      }
+    }
   }
 
   void _showSupportOptions(BuildContext context) {
@@ -276,19 +285,6 @@ class TenantDrawer extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _launchUrl(BuildContext context, String url) async {
-    try {
-      final Uri uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (_) {
-      if (context.mounted) {
-        SnackbarHelper.showError(context, 'Unable to open link');
-      }
-    }
   }
 
   Future<void> _launchEmail(BuildContext context) async {

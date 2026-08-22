@@ -266,6 +266,19 @@ class _ProfileScreenState extends State<ProfileScreen>
     return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 
+  Future<void> _launchUrl(String url) async {
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackbarHelper.showError(context, 'Could not open the link.');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -427,8 +440,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                       _buildSectionHeader('Quick Links'),
                       const SizedBox(height: 12),
 
-                      _buildLinkItem('Terms of Service', Icons.description_rounded),
-                      _buildLinkItem('Privacy Policy', Icons.privacy_tip_rounded),
+                      _buildLinkItem('Terms of Service', Icons.description_rounded, onTap: () => _launchUrl(kTermsUrl)),
+                      _buildLinkItem('Privacy Policy', Icons.privacy_tip_rounded, onTap: () => _launchUrl(kPrivacyUrl)),
 
                       const SizedBox(height: 22),
 
@@ -540,7 +553,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildLinkItem(String title, IconData icon) {
+  Widget _buildLinkItem(String title, IconData icon, {VoidCallback? onTap}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -564,7 +577,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         ),
         title: Text(title, style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 14.5)),
         trailing: Icon(Icons.chevron_right_rounded, color: Colors.white.withOpacity(0.25), size: 20),
-        onTap: () {
+        onTap: onTap ?? () {
           hapticFeedback();
           SnackbarHelper.showInfo(context, title);
         },
