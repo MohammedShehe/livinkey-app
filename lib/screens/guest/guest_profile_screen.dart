@@ -79,7 +79,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
   }
 
   // ============================================================
-  // FIXED: Load profile - works for BOTH guests AND tenants
+  // Load profile - works for BOTH guests AND tenants
   // ============================================================
   Future<void> _loadProfile() async {
     if (!mounted) return;
@@ -93,6 +93,16 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
         setState(() {
           _profileData = data;
           _isTenantViewingAsGuest = data['is_tenant_viewing_as_guest'] ?? false;
+          
+          // ============================================================
+          // FIXED: Only keep profile picture if tenant is viewing as guest
+          // Real guests should NOT have a profile picture
+          // ============================================================
+          if (!_isTenantViewingAsGuest) {
+            // Real guests should NOT have a profile picture
+            _profileData.remove('profile_picture');
+            _profileData.remove('document_url');
+          }
           _isLoading = false;
         });
       } else {
@@ -156,13 +166,8 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
     }
   }
 
-  // ============================================================
-  // FIXED: Edit profile - DISABLED for tenants viewing as guest
-  // ============================================================
+  // Edit profile - DISABLED for tenants viewing as guest
   void _showEditProfile() {
-    // ============================================================
-    // FIXED: Block editing if tenant is viewing as guest
-    // ============================================================
     if (_isTenantViewingAsGuest) {
       SnackbarHelper.showError(
         context, 
@@ -299,7 +304,6 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                                   setModalState(() => isSubmitting = true);
 
                                   try {
-                                    // Get the existing country code from profile
                                     final countryCode = _getString('country_code', defaultValue: '+91');
                                     
                                     final response = await _api.updateGuestProfile({
@@ -316,7 +320,6 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                                     }
 
                                     if (response['success'] == true) {
-                                      // Update local data
                                       setState(() {
                                         _profileData['full_name'] = name;
                                         _profileData['email'] = email;
@@ -390,13 +393,8 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
     );
   }
 
-  // ============================================================
-  // FIXED: Change Password - DISABLED for tenants viewing as guest
-  // ============================================================
+  // Change Password - DISABLED for tenants viewing as guest
   void _showChangePassword() {
-    // ============================================================
-    // FIXED: Block password change if tenant is viewing as guest
-    // ============================================================
     if (_isTenantViewingAsGuest) {
       SnackbarHelper.showError(
         context, 
@@ -708,7 +706,6 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
   Widget build(BuildContext context) {
     super.build(context);
     
-    // Get the height of the bottom navigation bar (floating tabs)
     final double bottomNavHeight = 76.0;
     final double bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
@@ -839,7 +836,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                   const SizedBox(height: 8),
 
                   // ============================================================
-                  // Profile header uses real data
+                  // Profile header with profile picture (only for tenants viewing as guest)
                   // ============================================================
                   _buildProfileHeader(),
                   const SizedBox(height: 24),
@@ -903,9 +900,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
 
                   const SizedBox(height: 20),
 
-                  // ============================================================
-                  // FIXED: Edit Profile button - disabled for tenants viewing as guest
-                  // ============================================================
+                  // Edit Profile button - disabled for tenants viewing as guest
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -950,9 +945,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
 
                   const SizedBox(height: 12),
 
-                  // ============================================================
-                  // FIXED: Change Password button - disabled for tenants viewing as guest
-                  // ============================================================
+                  // Change Password button - disabled for tenants viewing as guest
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
@@ -1058,9 +1051,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
     );
   }
 
-  // ============================================================
   // Helper methods use real data
-  // ============================================================
   Widget _buildSectionLabel(String text) {
     return Row(
       children: [
@@ -1086,10 +1077,19 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
     );
   }
 
+  // ============================================================
+  // FIXED: Profile header with profile picture (only for tenants viewing as guest)
+  // ============================================================
   Widget _buildProfileHeader() {
     final name = _getString('full_name', defaultValue: 'Guest User');
     final email = _getString('email', defaultValue: 'guest@example.com');
     final initials = getInitials(name);
+    
+    final String? profilePic = _isTenantViewingAsGuest
+        ? (_profileData['profile_picture'] ?? _profileData['document_url'])
+        : null;
+    
+    final bool showImage = _isTenantViewingAsGuest && profilePic != null && profilePic.isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1129,34 +1129,45 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
             width: 68,
             height: 68,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: _isTenantViewingAsGuest 
-                    ? [kLivinkeyGreen, Color(0xFF66BB6A)]
-                    : [const Color(0xFFFF9800), const Color(0xFFFFA726)],
-              ),
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: _isTenantViewingAsGuest 
-                      ? kLivinkeyGreen.withOpacity(0.4)
-                      : const Color(0xFFFF9800).withOpacity(0.4),
+                  color: (_isTenantViewingAsGuest ? kLivinkeyGreen : const Color(0xFFFF9800)).withOpacity(0.4),
                   blurRadius: 16,
                   offset: const Offset(0, 6),
                 ),
               ],
+              // ============================================================
+              // FIXED: Show image ONLY if tenant viewing as guest AND has photo
+              // ============================================================
+              image: showImage
+                  ? DecorationImage(
+                      image: NetworkImage(profilePic!),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+              gradient: !showImage
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: _isTenantViewingAsGuest
+                          ? [kLivinkeyGreen, Color(0xFF66BB6A)]
+                          : [const Color(0xFFFF9800), const Color(0xFFFFA726)],
+                    )
+                  : null,
             ),
-            child: Center(
-              child: Text(
-                initials,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
+            child: !showImage
+                ? Center(
+                    child: Text(
+                      initials,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  )
+                : null,
           ),
           const SizedBox(width: 16),
           Expanded(

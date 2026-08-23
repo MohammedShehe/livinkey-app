@@ -1149,6 +1149,39 @@ class ApiService {
     }
   }
 
+  // ============================================================
+  // FIXED: these were missing entirely — deleteNotification() in
+  // NotificationService had no backend call to make, so a "deleted"
+  // notification just came back on the next refresh.
+  // ============================================================
+  Future<Map<String, dynamic>> deleteTenantNotification(int notificationId) async {
+    try {
+      final response = await _dio.delete('/tenant-notifications/$notificationId');
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        return e.response!.data;
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> deleteGuestNotification(int notificationId) async {
+    try {
+      final response = await _dio.delete('/guest-notifications/$notificationId');
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        return e.response!.data;
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
   // ============ FEEDBACK ============
 
   Future<Map<String, dynamic>> submitFeedback(Map<String, dynamic> data) async {

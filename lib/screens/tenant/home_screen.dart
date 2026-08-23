@@ -156,11 +156,11 @@ class _HomeScreenState extends State<HomeScreen>
   double _getLogoSize(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
     if (screenWidth >= 600) {
-      return 120.0;
+      return 160.0; // Increased from 120.0
     } else if (screenWidth >= 400) {
-      return 64.0;
+      return 100.0; // Increased from 64.0
     } else {
-      return 50.0;
+      return 80.0; // Increased from 50.0
     }
   }
 
@@ -319,6 +319,9 @@ class _HomeScreenState extends State<HomeScreen>
                   children: [
                     const SizedBox(height: 8),
 
+                    // ============================================================
+                    // FIXED: Profile header with profile picture
+                    // ============================================================
                     Container(
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
@@ -402,15 +405,13 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                           ),
                           const SizedBox(width: 12),
+                          // ============================================================
+                          // FIXED: Avatar shows profile picture if available, otherwise initials
+                          // ============================================================
                           Container(
                             width: 56,
                             height: 56,
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [kLivinkeyGreen, Color(0xFF66BB6A)],
-                              ),
                               borderRadius: BorderRadius.circular(18),
                               boxShadow: [
                                 BoxShadow(
@@ -419,19 +420,34 @@ class _HomeScreenState extends State<HomeScreen>
                                   offset: const Offset(0, 6),
                                 ),
                               ],
+                              image: _profilePicture != null && _profilePicture!.isNotEmpty
+                                  ? DecorationImage(
+                                      image: NetworkImage(_profilePicture!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
+                              gradient: _profilePicture == null || _profilePicture!.isEmpty
+                                  ? const LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [kLivinkeyGreen, Color(0xFF66BB6A)],
+                                    )
+                                  : null,
                             ),
-                            child: Center(
-                              child: Text(
-                                _placeholderInitials.isNotEmpty
-                                    ? _placeholderInitials
-                                    : getInitials(_tenantName),
-                                style: const TextStyle(
-                                  color: Colors.black,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
+                            child: (_profilePicture == null || _profilePicture!.isEmpty)
+                                ? Center(
+                                    child: Text(
+                                      _placeholderInitials.isNotEmpty
+                                          ? _placeholderInitials
+                                          : getInitials(_tenantName),
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  )
+                                : null,
                           ),
                         ],
                       ),

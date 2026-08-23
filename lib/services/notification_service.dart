@@ -169,11 +169,35 @@ class NotificationService {
     }
   }
 
+  // ============================================================
+  // FIXED: this used to only remove the notification from the local
+  // in-memory `_notifications` list — it never called the backend.
+  // The DELETE /tenant-notifications/:id and /guest-notifications/:id
+  // routes existed and worked fine, but ApiService had no method to
+  // call them, so nothing on the server was ever deleted. The next
+  // time the bell was opened (which calls refresh()/re-fetches from
+  // the server), the "deleted" notification reappeared because it was
+  // still sitting in the database. Now the backend delete happens
+  // first, and the local list is only updated on success — a failed
+  // delete no longer silently pretends to have worked.
+  // ============================================================
   Future<void> deleteNotification(int id, {bool isTenant = true}) async {
     try {
-      _notifications.removeWhere((n) => n.id == id);
-      _notificationsController.add(List.from(_notifications));
+      final response = isTenant
+          ? await _api.deleteTenantNotification(id)
+          : await _api.deleteGuestNotification(id);
+
+      if (response['success'] == true) {
+        _notifications.removeWhere((n) => n.id == id);
+        _notificationsController.add(List.from(_notifications));
+        // Keep unread count in sync in case the deleted notification
+        // was still unread.
+        await refresh(isTenant: isTenant);
+      } else {
+        throw Exception(response['message'] ?? 'Failed to delete notification');
+      }
     } catch (e) {
+      rethrow;
     }
   }
 

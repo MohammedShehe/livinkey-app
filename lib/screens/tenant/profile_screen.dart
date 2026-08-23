@@ -348,6 +348,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                     children: [
                       const SizedBox(height: 8),
 
+                      // ============================================================
+                      // FIXED: Profile header with profile picture
+                      // ============================================================
                       _buildProfileHeader(),
                       const SizedBox(height: 26),
 
@@ -408,8 +411,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       const SizedBox(height: 22),
 
                       // ============================================================
-                      // FIXED: Simple navigation to Guest screen - NO token switching
-                      // The tenant stays logged in as tenant, just views guest UI
+                      // Simple navigation to Guest screen - NO token switching
                       // ============================================================
                       Center(
                         child: TextButton.icon(
@@ -488,7 +490,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  // ============================================================
+  // FIXED: Profile header with profile picture
+  // ============================================================
   Widget _buildProfileHeader() {
+    final String? profilePic = _profileData['profile_picture'] ?? _profileData['document_url'];
+    final bool showImage = profilePic != null && profilePic.isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -507,16 +515,43 @@ class _ProfileScreenState extends State<ProfileScreen>
             width: 68,
             height: 68,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [kLivinkeyGreen, Color(0xFF66BB6A)]),
               borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: kLivinkeyGreen.withOpacity(0.35), blurRadius: 18, offset: const Offset(0, 6))],
+              boxShadow: [
+                BoxShadow(
+                  color: kLivinkeyGreen.withOpacity(0.35),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+              // ============================================================
+              // FIXED: Show profile picture if available, otherwise fallback to initials
+              // ============================================================
+              image: showImage
+                  ? DecorationImage(
+                      image: NetworkImage(profilePic!),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+              gradient: !showImage
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [kLivinkeyGreen, Color(0xFF66BB6A)],
+                    )
+                  : null,
             ),
-            child: Center(
-              child: Text(
-                _getInitials(),
-                style: const TextStyle(color: Colors.black, fontSize: 25, fontWeight: FontWeight.w800),
-              ),
-            ),
+            child: !showImage
+                ? Center(
+                    child: Text(
+                      _getInitials(),
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 25,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  )
+                : null,
           ),
           const SizedBox(width: 18),
           Expanded(
@@ -525,12 +560,19 @@ class _ProfileScreenState extends State<ProfileScreen>
               children: [
                 Text(
                   _tenantName,
-                  style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   '$_pgName • $_roomNumber',
-                  style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 13.5),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.55),
+                    fontSize: 13.5,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Container(
@@ -542,7 +584,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                   child: const Text(
                     'Tenant',
-                    style: TextStyle(color: kLivinkeyGreen, fontSize: 11, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      color: kLivinkeyGreen,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],

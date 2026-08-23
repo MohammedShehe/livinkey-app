@@ -33,6 +33,10 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
   bool _isRefreshing = false;
   bool _isLoading = true;
   bool _isTenantViewingAsGuest = false;
+  String? _profilePicture;  // ============================================================
+                            // ADDED: Profile picture for tenants viewing as guest
+                            // ============================================================
+  String _placeholderInitials = '';
 
   final ApiService _api = ApiService();
 
@@ -85,7 +89,17 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
             _greeting = data['greeting']?.toString() ?? getTimeOfDay();
             _totalPGs = data['total_pgs'] ?? 0;
             _isTenantViewingAsGuest = data['is_tenant_viewing_as_guest'] ?? false;
+            _placeholderInitials = data['placeholder_initials'] ?? '';
             
+            // ============================================================
+            // FIXED: Only get profile picture if tenant is viewing as guest
+            // Real guests should NOT have a profile picture
+            // ============================================================
+            if (_isTenantViewingAsGuest) {
+              _profilePicture = data['profile_picture']?.toString();
+            } else {
+              _profilePicture = null;  // Real guests have no profile picture
+            }
           }
         }
       } catch (dashError) {
@@ -93,6 +107,8 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
         _greeting = getTimeOfDay();
         _totalPGs = 0;
         _isTenantViewingAsGuest = false;
+        _profilePicture = null;
+        _placeholderInitials = '';
       }
 
       try {
@@ -197,9 +213,13 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
 
   double _getLogoSize(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
-    if (screenWidth >= 600) return 120.0;
-    if (screenWidth >= 400) return 64.0;
-    return 50.0;
+    if (screenWidth >= 600) {
+      return 160.0; // Increased from 120.0
+    } else if (screenWidth >= 400) {
+      return 100.0; // Increased from 64.0
+    } else {
+      return 80.0; // Increased from 50.0
+    }
   }
 
   String _getGreeting() {
@@ -651,7 +671,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
 }
 
 // ============================================================
-// FIXED: _PulsingDot receives isTenantViewingAsGuest as parameter
+// _PulsingDot receives isTenantViewingAsGuest as parameter
 // ============================================================
 class _PulsingDot extends StatefulWidget {
   final bool isTenantViewingAsGuest;
