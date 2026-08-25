@@ -434,8 +434,6 @@ class ApiService {
 
   // ============ GUEST ENDPOINTS ============
 
-  // ============ GUEST ENDPOINTS ============
-
   Future<Map<String, dynamic>> getGuestDashboard() async {
     try {
       final response = await _dio.get(
@@ -1215,6 +1213,83 @@ class ApiService {
   Future<Map<String, dynamic>> checkFeedbackStatus() async {
     try {
       final response = await _dio.get('/feedbacks/status');
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        return e.response!.data;
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
+  // ============ GUEST FEEDBACK (Mobile App) ============
+
+  Future<Map<String, dynamic>> submitGuestFeedback(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post('/feedbacks/guest/submit', data: data);
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        return e.response!.data;
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> checkGuestFeedbackStatus() async {
+    try {
+      final response = await _dio.get('/feedbacks/guest/status');
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        return e.response!.data;
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> getMyGuestFeedback() async {
+    try {
+      final response = await _dio.get('/feedbacks/guest/my-feedback');
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        return e.response!.data;
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
+  // ============ PUBLIC FEEDBACK (Website - No Auth) ============
+
+  Future<Map<String, dynamic>> submitPublicFeedback(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post('/feedbacks/public/submit', data: data);
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        return e.response!.data;
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
+  // ============================================================
+  // NEW: Tenant completes maintenance request
+  // ============================================================
+  Future<Map<String, dynamic>> completeMaintenanceByTenant(int requestId) async {
+    try {
+      final response = await _dio.put('/maintenance/$requestId/complete-by-tenant');
       return response.data;
     } on DioException catch (e) {
       if (e.response != null && e.response!.data != null) {

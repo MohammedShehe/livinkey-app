@@ -38,6 +38,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
 
   List<Map<String, dynamic>> _requests = [];
   Map<String, dynamic> _stats = {};
+  int? _completingRequestId;  // NEW: Track which request is being completed
 
   int _parseIntSafe(dynamic value) {
     if (value == null) return 0;
@@ -172,6 +173,35 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
   int get _pendingCount => _parseIntSafe(_stats['pending']);
   int get _inProgressCount => _parseIntSafe(_stats['in_progress']);
   int get _completedCount => _parseIntSafe(_stats['completed']);
+
+  // ============================================================
+  // NEW: Handle tenant completing a maintenance request
+  // ============================================================
+  Future<void> _handleCompleteByTenant(int requestId) async {
+    setState(() => _completingRequestId = requestId);
+    
+    try {
+      final response = await _api.completeMaintenanceByTenant(requestId);
+      
+      if (!mounted) return;
+      
+      if (response['success'] == true) {
+        SnackbarHelper.showSuccess(context, 'Maintenance completed successfully! 🎉');
+        await _loadMaintenanceData();
+      } else {
+        SnackbarHelper.showError(
+          context, 
+          response['message'] ?? 'Failed to complete maintenance request',
+        );
+      }
+    } catch (e) {
+      SnackbarHelper.showError(context, 'An error occurred. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() => _completingRequestId = null);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -416,10 +446,20 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
     );
   }
 
+  // ============================================================
+  // UPDATED: _buildMaintenanceItem with "Mark as Completed" button
+  // for in_progress requests
+  // ============================================================
   Widget _buildMaintenanceItem(Map<String, dynamic> request) {
     final status = request['status'] ?? 'pending';
-    final statusColor = status == 'pending' ? Colors.red : status == 'in_progress' ? Colors.orange : kLivinkeyGreen;
-    final statusLabel = status == 'pending' ? 'Pending' : status == 'in_progress' ? 'In Progress' : 'Completed';
+    final statusColor = status == 'pending' ? Colors.red : 
+                        status == 'in_progress' ? Colors.orange : 
+                        kLivinkeyGreen;
+    final statusLabel = status == 'pending' ? 'Pending' : 
+                        status == 'in_progress' ? 'In Progress' : 
+                        'Completed';
+    final bool canComplete = status == 'in_progress';
+    final bool isCompleting = _completingRequestId == request['id'];
 
     final issueType = request['issue_type'] ?? 'Other';
     final iconMap = {
@@ -494,6 +534,48 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
                     style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                // ============================================================
+                // NEW: "Mark as Completed" button for in_progress requests
+                // ============================================================
+                if (canComplete)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: isCompleting ? null : () => _handleCompleteByTenant(request['id']),
+                            icon: isCompleting
+                                ? const SizedBox(
+                                    height: 16,
+                                    width: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                                    ),
+                                  )
+                                : const Icon(Icons.check_circle_rounded, color: Colors.black, size: 16),
+                            label: Text(
+                              isCompleting ? 'Completing...' : 'Mark as Completed',
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: kLivinkeyGreen,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
               ],
             ),

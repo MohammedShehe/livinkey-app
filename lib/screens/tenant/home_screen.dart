@@ -28,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen>
   late Animation<Offset> _slideAnimation;
   bool _isRefreshing = false;
   bool _isLoading = true;
+  bool _hasLoadedOnce = false;
 
   final ApiService _api = ApiService();
 
@@ -56,6 +57,40 @@ class _HomeScreenState extends State<HomeScreen>
   int _maintenancePending = 0;
   int _maintenanceInProgress = 0;
   int _maintenanceCompleted = 0;
+
+  // ============================================================
+  // Safe type conversion helpers
+  // ============================================================
+  int _safeToInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return 0;
+      return int.tryParse(trimmed) ?? 0;
+    }
+    if (value is bool) return value ? 1 : 0;
+    return 0;
+  }
+
+  double _safeToDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return 0.0;
+      return double.tryParse(trimmed) ?? 0.0;
+    }
+    if (value is bool) return value ? 1.0 : 0.0;
+    return 0.0;
+  }
+
+  String _safeToString(dynamic value) {
+    if (value == null) return '';
+    return value.toString();
+  }
 
   @override
   void initState() {
@@ -87,42 +122,66 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadHomeData() async {
     setState(() => _isLoading = true);
+    
     try {
       final response = await _api.getTenantHome();
-      if (response['success'] && response['data'] != null) {
+      
+      if (response['success'] == true && response['data'] != null) {
         final data = response['data'];
-        _greeting = data['greeting'] ?? '';
-        _tenantName = data['tenant']?['full_name'] ?? '';
-        _email = data['tenant']?['email'] ?? '';
-        _pgName = data['tenant']?['pg_name'] ?? 'Not Assigned';
-        _roomNumber = data['tenant']?['room_number'] ?? 'Not Assigned';
-        _profilePicture = data['tenant']?['profile_picture'];
-        _placeholderInitials = data['tenant']?['placeholder_initials'] ?? '';
+        
+        // Tenant data
+        final tenant = data['tenant'] ?? {};
+        _greeting = _safeToString(data['greeting']);
+        _tenantName = _safeToString(tenant['full_name']);
+        _email = _safeToString(tenant['email']);
+        _pgName = _safeToString(tenant['pg_name']);
+        _roomNumber = _safeToString(tenant['room_number']);
+        _profilePicture = tenant['profile_picture'] != null ? _safeToString(tenant['profile_picture']) : null;
+        _placeholderInitials = _safeToString(tenant['placeholder_initials']);
 
         // Rent status
         final rentStatus = data['rent_status'] ?? {};
-        _rentStatus = rentStatus['status'] ?? 'unpaid';
-        _dueDays = rentStatus['due_days'] ?? 0;
-        _nextPaymentDate = rentStatus['next_payment_date'];
-        _daysLeft = rentStatus['days_left'] ?? 0;
-        _paidFrom = rentStatus['paid_from'];
-        _paidTill = rentStatus['paid_till'];
+        _rentStatus = _safeToString(rentStatus['status']);
+        _dueDays = _safeToInt(rentStatus['due_days']);
+        _nextPaymentDate = rentStatus['next_payment_date'] != null 
+            ? _safeToString(rentStatus['next_payment_date']) 
+            : null;
+        _daysLeft = _safeToInt(rentStatus['days_left']);
+        _paidFrom = rentStatus['paid_from'] != null 
+            ? _safeToString(rentStatus['paid_from']) 
+            : null;
+        _paidTill = rentStatus['paid_till'] != null 
+            ? _safeToString(rentStatus['paid_till']) 
+            : null;
 
         // Current bill
-        _currentBill = data['current_bill'];
+        _currentBill = data['current_bill'] as Map<String, dynamic>?;
+        if (_currentBill != null) {
+          _currentBill!['total_amount'] = _safeToDouble(_currentBill!['total_amount']);
+          _currentBill!['paid_amount'] = _safeToDouble(_currentBill!['paid_amount']);
+          _currentBill!['fine_amount'] = _safeToDouble(_currentBill!['fine_amount']);
+        }
 
         // Maintenance stats
         final maintenance = data['maintenance'] ?? {};
-        _maintenanceTotal = maintenance['total'] ?? 0;
-        _maintenancePending = maintenance['pending'] ?? 0;
-        _maintenanceInProgress = maintenance['in_progress'] ?? 0;
-        _maintenanceCompleted = maintenance['completed'] ?? 0;
+        _maintenanceTotal = _safeToInt(maintenance['total']);
+        _maintenancePending = _safeToInt(maintenance['pending']);
+        _maintenanceInProgress = _safeToInt(maintenance['in_progress']);
+        _maintenanceCompleted = _safeToInt(maintenance['completed']);
 
-        // Update notification service
         await NotificationService().refresh(isTenant: true);
+        
+        _hasLoadedOnce = true;
+      } else {
+        if (!_hasLoadedOnce && mounted) {
+          final errorMsg = response['message'] ?? 'Failed to load dashboard data';
+          SnackbarHelper.showError(context, errorMsg);
+        }
       }
     } catch (e) {
-      SnackbarHelper.showError(context, 'Failed to load dashboard data');
+      if (!_hasLoadedOnce && mounted) {
+        SnackbarHelper.showError(context, 'Failed to load dashboard data');
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -146,21 +205,83 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _handleRefresh() async {
     setState(() => _isRefreshing = true);
-    await _loadHomeData();
-    if (mounted) {
-      setState(() => _isRefreshing = false);
-      SnackbarHelper.showSuccess(context, 'Dashboard refreshed');
+    
+    try {
+      final response = await _api.getTenantHome();
+      
+      if (response['success'] == true && response['data'] != null) {
+        final data = response['data'];
+        
+        final tenant = data['tenant'] ?? {};
+        _greeting = _safeToString(data['greeting']);
+        _tenantName = _safeToString(tenant['full_name']);
+        _email = _safeToString(tenant['email']);
+        _pgName = _safeToString(tenant['pg_name']);
+        _roomNumber = _safeToString(tenant['room_number']);
+        _profilePicture = tenant['profile_picture'] != null 
+            ? _safeToString(tenant['profile_picture']) 
+            : null;
+        _placeholderInitials = _safeToString(tenant['placeholder_initials']);
+
+        final rentStatus = data['rent_status'] ?? {};
+        _rentStatus = _safeToString(rentStatus['status']);
+        _dueDays = _safeToInt(rentStatus['due_days']);
+        _nextPaymentDate = rentStatus['next_payment_date'] != null 
+            ? _safeToString(rentStatus['next_payment_date']) 
+            : null;
+        _daysLeft = _safeToInt(rentStatus['days_left']);
+        _paidFrom = rentStatus['paid_from'] != null 
+            ? _safeToString(rentStatus['paid_from']) 
+            : null;
+        _paidTill = rentStatus['paid_till'] != null 
+            ? _safeToString(rentStatus['paid_till']) 
+            : null;
+
+        _currentBill = data['current_bill'] as Map<String, dynamic>?;
+        if (_currentBill != null) {
+          _currentBill!['total_amount'] = _safeToDouble(_currentBill!['total_amount']);
+          _currentBill!['paid_amount'] = _safeToDouble(_currentBill!['paid_amount']);
+          _currentBill!['fine_amount'] = _safeToDouble(_currentBill!['fine_amount']);
+        }
+
+        final maintenance = data['maintenance'] ?? {};
+        _maintenanceTotal = _safeToInt(maintenance['total']);
+        _maintenancePending = _safeToInt(maintenance['pending']);
+        _maintenanceInProgress = _safeToInt(maintenance['in_progress']);
+        _maintenanceCompleted = _safeToInt(maintenance['completed']);
+
+        await NotificationService().refresh(isTenant: true);
+        
+        _hasLoadedOnce = true;
+        
+        if (mounted) {
+          SnackbarHelper.showSuccess(context, 'Dashboard refreshed');
+        }
+      } else {
+        if (mounted && !_hasLoadedOnce) {
+          final errorMsg = response['message'] ?? 'Failed to load dashboard data';
+          SnackbarHelper.showError(context, errorMsg);
+        }
+      }
+    } catch (e) {
+      if (mounted && !_hasLoadedOnce) {
+        SnackbarHelper.showError(context, 'Failed to load dashboard data');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRefreshing = false);
+      }
     }
   }
 
   double _getLogoSize(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
     if (screenWidth >= 600) {
-      return 160.0; // Increased from 120.0
+      return 160.0;
     } else if (screenWidth >= 400) {
-      return 100.0; // Increased from 64.0
+      return 100.0;
     } else {
-      return 80.0; // Increased from 50.0
+      return 80.0;
     }
   }
 
@@ -319,9 +440,7 @@ class _HomeScreenState extends State<HomeScreen>
                   children: [
                     const SizedBox(height: 8),
 
-                    // ============================================================
-                    // FIXED: Profile header with profile picture
-                    // ============================================================
+                    // Profile header with profile picture
                     Container(
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
@@ -405,9 +524,6 @@ class _HomeScreenState extends State<HomeScreen>
                             ),
                           ),
                           const SizedBox(width: 12),
-                          // ============================================================
-                          // FIXED: Avatar shows profile picture if available, otherwise initials
-                          // ============================================================
                           Container(
                             width: 56,
                             height: 56,
@@ -595,7 +711,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 }
 
-// Notification Bell Widget (same as before but with API integration)
+// Notification Bell Widget
 class _NotificationBell extends StatefulWidget {
   const _NotificationBell();
 

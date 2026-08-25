@@ -290,6 +290,7 @@ class PushNotificationService {
       case 'maintenance_created':
       case 'maintenance_started':
       case 'maintenance_completed':
+      case 'maintenance_reminder':  // NEW: For 20-minute completion reminder
         navigatorKey.currentState!.pushNamed('/tenant-maintenance');
         break;
       

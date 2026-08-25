@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:livinkey/screens/guest/guest_feedback_screen.dart';
 
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
@@ -11,6 +12,7 @@ import '../../models/pg_model.dart';
 import '../../widgets/common/snackbar_helper.dart';
 import '../common/notification_screen.dart';
 import 'guest_screen.dart';
+import '../guest/guest_feedback_screen.dart'; 
 
 class GuestHomeScreen extends StatefulWidget {
   const GuestHomeScreen({super.key});
@@ -190,6 +192,17 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
     state?.openDrawer();
   }
 
+  // ============================================================
+  // ADDED: Open Feedback Screen
+  // ============================================================
+  void _openFeedback() {
+    hapticFeedback();
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const GuestFeedbackScreen()),
+    );
+  }
+
   Future<void> _handleRefresh() async {
     setState(() => _isRefreshing = true);
     await _loadData();
@@ -282,6 +295,21 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
         title: Image.asset(kGeneralLogo, height: logoSize, width: logoSize),
         centerTitle: false,
         actions: [
+          // ============================================================
+          // ADDED: Feedback Icon Button
+          // ============================================================
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
+              ),
+              child: const Icon(Icons.feedback_rounded, color: Colors.white, size: 22),
+            ),
+            onPressed: _openFeedback,
+          ),
           const _NotificationBell(),
           Container(
             margin: const EdgeInsets.only(right: 16),
