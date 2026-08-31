@@ -7,85 +7,70 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:app_badge_plus/app_badge_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 
 /// Global navigator key for navigation from notifications
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 class PushNotificationService {
-  static final PushNotificationService _instance = 
+  static final PushNotificationService _instance =
       PushNotificationService._internal();
   factory PushNotificationService() => _instance;
   PushNotificationService._internal();
 
-  // ============================================================
-  // FIXED: Changed from eager field to lazy getter
-  // Now FirebaseMessaging.instance is only accessed AFTER
-  // Firebase.initializeApp() has been called
-  // ============================================================
+  // Lazy getter – only accessed AFTER Firebase.initializeApp()
   FirebaseMessaging get _fcm => FirebaseMessaging.instance;
-  
-  final FlutterLocalNotificationsPlugin _localNotifications = 
+
+  final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
-  
+
   final ApiService _api = ApiService();
   bool _isInitialized = false;
   bool _isFirebaseInitialized = false;
   String? _fcmToken;
 
-  /// ============================================================
-  /// NEW: Initialize Firebase only (called from main())
-  /// This sets up Firebase without trying to save FCM tokens
-  /// ============================================================
+  // Track whether we already handled an initial (terminated) message
+  bool _initialMessageHandled = false;
+
+  /// Initialize Firebase only (called from main())
   Future<void> initializeFirebaseOnly() async {
     if (_isFirebaseInitialized) return;
-    
+
     try {
       await Firebase.initializeApp();
       _isFirebaseInitialized = true;
     } catch (e) {
-      _isFirebaseInitialized = true; // Don't block app startup
+      // Don't block app startup
+      _isFirebaseInitialized = true;
     }
   }
 
-  /// ============================================================
-  /// FIXED: Initialize push notifications (called AFTER login)
-  /// Now the user is authenticated when we save FCM token
-  /// ============================================================
+  /// Full push-notification init – call AFTER login so auth is valid
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     try {
-      // Ensure Firebase is initialized first
       if (!_isFirebaseInitialized) {
         await Firebase.initializeApp();
         _isFirebaseInitialized = true;
       }
 
-      // Skip Firebase Messaging on web
       if (!kIsWeb) {
-        // Request permissions
         await _requestPermissions();
-
-        // Initialize local notifications
         await _initializeLocalNotifications();
-
-        // Get FCM token
         await _getFCMToken();
-
-        // Setup message handlers
         await _setupMessageHandlers();
-      } else {
       }
 
       _isInitialized = true;
     } catch (e) {
-      _isInitialized = true; // Don't block app startup
+      // Don't block app startup
+      _isInitialized = true;
     }
   }
 
-  /// Request notification permissions
   Future<void> _requestPermissions() async {
-    NotificationSettings settings = await _fcm.requestPermission(
+    final settings = await _fcm.requestPermission(
       alert: true,
       announcement: true,
       badge: true,
@@ -94,10 +79,6 @@ class PushNotificationService {
       provisional: false,
       sound: true,
     );
-
-    if (settings.authorizationStatus != AuthorizationStatus.authorized) {
-    } else {
-    }
 
     if (Platform.isIOS) {
       await _fcm.setForegroundNotificationPresentationOptions(
@@ -108,19 +89,17 @@ class PushNotificationService {
     }
   }
 
-  /// Initialize local notifications
   Future<void> _initializeLocalNotifications() async {
-    const AndroidInitializationSettings androidSettings = 
+    const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    
-    const DarwinInitializationSettings iosSettings = 
-        DarwinInitializationSettings(
-          requestAlertPermission: false,
-          requestBadgePermission: false,
-          requestSoundPermission: false,
-        );
 
-    const InitializationSettings settings = InitializationSettings(
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
+    );
+
+    const settings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
     );
@@ -131,7 +110,6 @@ class PushNotificationService {
     );
   }
 
-  /// Get and store FCM token
   Future<void> _getFCMToken() async {
     try {
       _fcmToken = await _fcm.getToken();
@@ -139,38 +117,28 @@ class PushNotificationService {
         await _storeFCMToken(_fcmToken!);
       }
     } catch (e) {
+      // ignore
     }
   }
 
-  /// ============================================================
-  /// FIXED: Store FCM token locally and send to backend
-  /// Now this is called AFTER login, so authentication is valid
-  /// ============================================================
   Future<void> _storeFCMToken(String token) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('fcm_token', token);
-      
-      // ============================================================
-      // FIXED: Send to backend - user is now authenticated
-      // because this is called after login
-      // ============================================================
+
       final response = await _api.updateFCMToken(token);
+      // if it fails we still keep the token locally as pending
     } catch (e) {
-      // Store token locally as pending, will retry on next login
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pending_fcm_token', token);
     }
   }
 
-  /// ============================================================
-  /// NEW: Retry saving pending FCM token after login
-  /// ============================================================
   Future<void> retryPendingToken() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final pendingToken = prefs.getString('pending_fcm_token');
-      
+
       if (pendingToken != null && pendingToken.isNotEmpty) {
         final response = await _api.updateFCMToken(pendingToken);
         if (response['success'] == true) {
@@ -178,23 +146,29 @@ class PushNotificationService {
         }
       }
     } catch (e) {
+      // ignore
     }
   }
 
-  /// Setup message handlers
   Future<void> _setupMessageHandlers() async {
     // 1. Foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       _handleForegroundMessage(message);
     });
 
-    // 2. Background messages
+    // 2. Background messages (must be top-level)
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     // 3. App opened from terminated state
-    RemoteMessage? initialMessage = await _fcm.getInitialMessage();
-    if (initialMessage != null) {
-      _handleNotificationData(initialMessage.data);
+    if (!_initialMessageHandled) {
+      final RemoteMessage? initialMessage = await _fcm.getInitialMessage();
+      if (initialMessage != null) {
+        _initialMessageHandled = true;
+        // Delay a little so the navigator is ready
+        Future.delayed(const Duration(milliseconds: 800), () {
+          _handleNotificationData(initialMessage.data);
+        });
+      }
     }
 
     // 4. App opened from background
@@ -208,22 +182,24 @@ class PushNotificationService {
     });
   }
 
-  /// Handle foreground messages
   void _handleForegroundMessage(RemoteMessage message) {
     _showLocalNotification(message);
-    
-    // Refresh in-app notifications
-    _api.getTenantNotifications().then((_) {
-      // Notification service will update automatically
-    });
+
+    // Refresh the in-app notification list so the badge updates immediately
+    try {
+      NotificationService().refresh(isTenant: true);
+    } catch (_) {}
   }
 
-  /// Show local notification (for foreground)
   Future<void> _showLocalNotification(RemoteMessage message) async {
     final String title = message.notification?.title ?? 'Livinkey';
-    final String body = message.notification?.body ?? 'You have a new notification';
+    final String body =
+        message.notification?.body ?? 'You have a new notification';
 
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    // Encode the whole data map as payload so we can navigate correctly
+    final String payload = _encodePayload(message.data);
+
+    const androidDetails = AndroidNotificationDetails(
       'livinkey_channel',
       'Livinkey Notifications',
       channelDescription: 'Notifications from Livinkey',
@@ -239,81 +215,106 @@ class PushNotificationService {
       styleInformation: BigTextStyleInformation(''),
     );
 
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+    const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: true,
       presentSound: true,
       sound: 'default',
     );
 
-    final NotificationDetails details = NotificationDetails(
+    final details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,
     );
 
     await _localNotifications.show(
-      DateTime.now().millisecond,
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
       title,
       body,
       details,
-      payload: message.data['action'] ?? 'open',
+      payload: payload,
     );
 
-    // Update app badge
     await _updateAppBadge();
   }
 
-  /// Handle notification tap
+  String _encodePayload(Map<String, dynamic> data) {
+    // Simple key=value&key2=value2 encoding
+    return data.entries
+        .map((e) => '${e.key}=${Uri.encodeComponent(e.value.toString())}')
+        .join('&');
+  }
+
+  Map<String, dynamic> _decodePayload(String? payload) {
+    if (payload == null || payload.isEmpty) return {};
+    final map = <String, dynamic>{};
+    for (final part in payload.split('&')) {
+      final idx = part.indexOf('=');
+      if (idx > 0) {
+        final key = part.substring(0, idx);
+        final value = Uri.decodeComponent(part.substring(idx + 1));
+        map[key] = value;
+      }
+    }
+    return map;
+  }
+
   void _handleNotificationTap(NotificationResponse response) {
-    if (response.payload != null) {
-      final data = {'action': response.payload!};
-      _handleNotificationData(data);
-    }
+    final data = _decodePayload(response.payload);
+    _handleNotificationData(data);
   }
 
-  /// Handle notification data (navigate to appropriate screen)
+  /// Navigate to the correct screen based on notification type
   void _handleNotificationData(Map<String, dynamic> data) {
-    final String type = data['type'] ?? '';
-    
-    if (navigatorKey.currentContext == null) return;
+    final String type = (data['type'] ?? data['action'] ?? '').toString().toLowerCase();
 
-    // Navigate based on notification type
-    switch (type) {
-      case 'bill_created':
-      case 'bill_paid':
-      case 'bill_partially_paid':
-      case 'bill_fine_applied':
-      case 'payment_reminder':
-        navigatorKey.currentState!.pushNamed('/tenant-payments');
-        break;
-      
-      case 'maintenance_created':
-      case 'maintenance_started':
-      case 'maintenance_completed':
-      case 'maintenance_reminder':  // NEW: For 20-minute completion reminder
-        navigatorKey.currentState!.pushNamed('/tenant-maintenance');
-        break;
-      
-      case 'document_reminder':
-      case 'efrro_expiry':
-        navigatorKey.currentState!.pushNamed('/tenant-documents');
-        break;
-      
-      default:
-        navigatorKey.currentState!.pushNamed('/tenant-home');
-        break;
-    }
-  }
-
-  /// Update app icon badge
-  Future<void> _updateAppBadge() async {
-    try {
-      // Skip badge update on iOS (handled natively by APNs)
-      if (Platform.isIOS) {
+    // Wait until navigator is ready
+    void tryNavigate() {
+      final nav = navigatorKey.currentState;
+      if (nav == null) {
+        // Retry a few times
+        Future.delayed(const Duration(milliseconds: 300), tryNavigate);
         return;
       }
 
-      // Check if the app badge is supported (Android only)
+      switch (type) {
+        case 'bill_created':
+        case 'bill_paid':
+        case 'bill_partially_paid':
+        case 'bill_fine_applied':
+        case 'payment_reminder':
+        case 'payment':
+          nav.pushNamed('/tenant-payments');
+          break;
+
+        case 'maintenance_created':
+        case 'maintenance_started':
+        case 'maintenance_completed':
+        case 'maintenance_reminder':
+        case 'maintenance':
+          nav.pushNamed('/tenant-maintenance');
+          break;
+
+        case 'document_reminder':
+        case 'efrro_expiry':
+        case 'document':
+          nav.pushNamed('/tenant-documents');
+          break;
+
+        default:
+          // Fallback – open tenant home
+          nav.pushNamed('/tenant-home');
+          break;
+      }
+    }
+
+    tryNavigate();
+  }
+
+  Future<void> _updateAppBadge() async {
+    try {
+      if (Platform.isIOS) return;
+
       bool isSupported = false;
       try {
         isSupported = await AppBadgePlus.isSupported();
@@ -321,28 +322,22 @@ class PushNotificationService {
         return;
       }
 
-      if (!isSupported) {
-        return;
-      }
+      if (!isSupported) return;
 
       final count = await _api.getUnreadTenantCount();
       final unreadCount = count['unreadCount'] ?? 0;
-
-      await AppBadgePlus.updateBadge(unreadCount);
+      await AppBadgePlus.updateBadge(unreadCount is int ? unreadCount : 0);
     } catch (e) {
+      // ignore
     }
   }
 
-  /// Get FCM token
   Future<String?> getToken() async {
     if (_fcmToken != null) return _fcmToken;
-    
-    // Try to get from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('fcm_token');
   }
 
-  /// Remove FCM token on logout
   Future<void> removeToken() async {
     if (_fcmToken != null) {
       await _api.removeFCMToken(token: _fcmToken);
@@ -352,17 +347,24 @@ class PushNotificationService {
     await prefs.remove('pending_fcm_token');
     _fcmToken = null;
   }
+
+  /// Call this when the app returns to the foreground
+  Future<void> onAppResumed({bool isTenant = true}) async {
+    try {
+      await NotificationService().refresh(isTenant: isTenant);
+      await _updateAppBadge();
+    } catch (_) {}
+  }
 }
 
-/// Background message handler (must be top-level function)
+/// Background message handler (must be top-level)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  
-  final FlutterLocalNotificationsPlugin localNotifications = 
-      FlutterLocalNotificationsPlugin();
-  
-  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+
+  final localNotifications = FlutterLocalNotificationsPlugin();
+
+  const androidDetails = AndroidNotificationDetails(
     'livinkey_background_channel',
     'Livinkey Notifications',
     channelDescription: 'Livinkey background notifications',
@@ -371,15 +373,15 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     icon: '@mipmap/ic_launcher',
   );
 
-  const NotificationDetails details = NotificationDetails(
-    android: androidDetails,
-  );
+  const details = NotificationDetails(android: androidDetails);
 
   await localNotifications.show(
-    DateTime.now().millisecond,
+    DateTime.now().millisecondsSinceEpoch ~/ 1000,
     message.notification?.title ?? 'Livinkey',
     message.notification?.body ?? 'You have a new notification',
     details,
-    payload: message.data['action'] ?? 'open',
+    payload: message.data.entries
+        .map((e) => '${e.key}=${Uri.encodeComponent(e.value.toString())}')
+        .join('&'),
   );
 }

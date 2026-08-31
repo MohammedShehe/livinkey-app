@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../widgets/common/snackbar_helper.dart';
-import '../../models/notification_model.dart';
+import '../../models/auth_models.dart';          // ← single source of NotificationModel
 import '../../services/notification_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
@@ -13,20 +15,23 @@ class NotificationScreen extends StatefulWidget {
   State<NotificationScreen> createState() => _NotificationScreenState();
 }
 
-class _NotificationScreenState extends State<NotificationScreen> 
+class _NotificationScreenState extends State<NotificationScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
-  
+
   final NotificationService _notificationService = NotificationService();
   List<NotificationModel> _notifications = [];
-  bool _isLoading = false;
+  bool _isLoading = true;
   bool _isRefreshing = false;
+
+  StreamSubscription<List<NotificationModel>>? _subscription;
 
   @override
   void initState() {
     super.initState();
+
     _fadeController = AnimationController(
       duration: kFadeDuration,
       vsync: this,
@@ -40,23 +45,34 @@ class _NotificationScreenState extends State<NotificationScreen>
     ).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOutCubic),
     );
-    
+
+    // Live updates from the service
+    _subscription = _notificationService.notificationsStream.listen((list) {
+      if (mounted) {
+        setState(() {
+          _notifications = list;
+          _isLoading = false;
+        });
+      }
+    });
+
     _loadNotifications();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _fadeController.forward());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fadeController.forward();
+    });
   }
 
   @override
   void dispose() {
+    _subscription?.cancel();
     _fadeController.dispose();
     super.dispose();
   }
 
-  // ============================================================
-  // FIXED: Load real notifications from API
-  // ============================================================
   Future<void> _loadNotifications() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
+
     try {
       await _notificationService.refresh(isTenant: true);
       if (mounted) {
@@ -82,31 +98,15 @@ class _NotificationScreenState extends State<NotificationScreen>
     }
   }
 
-  // ============================================================
-  // FIXED: Mark notification as read with proper API call
-  // ============================================================
   Future<void> _markAsRead(NotificationModel notification) async {
     if (notification.isRead) return;
-    
+
     try {
       await _notificationService.markAsRead(notification.id, isTenant: true);
-      // Update local state
       setState(() {
         final index = _notifications.indexWhere((n) => n.id == notification.id);
         if (index != -1) {
-          _notifications[index] = NotificationModel(
-            id: notification.id,
-            title: notification.title,
-            message: notification.message,
-            type: notification.type,
-            createdAt: notification.createdAt,
-            isRead: true,
-            entityId: notification.entityId,
-            entityType: notification.entityType,
-            link: notification.link,
-            icon: notification.icon,
-            color: notification.color,
-          );
+          _notifications[index] = notification.copyWith(isRead: true);
         }
       });
     } catch (e) {
@@ -114,29 +114,14 @@ class _NotificationScreenState extends State<NotificationScreen>
     }
   }
 
-  // ============================================================
-  // FIXED: Mark all notifications as read with proper API call
-  // ============================================================
   Future<void> _markAllAsRead() async {
     if (_notifications.isEmpty) return;
-    
+
     try {
       await _notificationService.markAllAsRead(isTenant: true);
-      // Update all notifications
       setState(() {
-        _notifications = _notifications.map((n) => NotificationModel(
-          id: n.id,
-          title: n.title,
-          message: n.message,
-          type: n.type,
-          createdAt: n.createdAt,
-          isRead: true,
-          entityId: n.entityId,
-          entityType: n.entityType,
-          link: n.link,
-          icon: n.icon,
-          color: n.color,
-        )).toList();
+        _notifications =
+            _notifications.map((n) => n.copyWith(isRead: true)).toList();
       });
       SnackbarHelper.showSuccess(context, 'All notifications marked as read');
     } catch (e) {
@@ -144,18 +129,53 @@ class _NotificationScreenState extends State<NotificationScreen>
     }
   }
 
-  // ============================================================
-  // FIXED: Delete notification
-  // ============================================================
   Future<void> _deleteNotification(NotificationModel notification) async {
     try {
-      await _notificationService.deleteNotification(notification.id, isTenant: true);
+      await _notificationService.deleteNotification(notification.id,
+          isTenant: true);
       setState(() {
         _notifications.removeWhere((n) => n.id == notification.id);
       });
       SnackbarHelper.show(context, 'Notification dismissed');
     } catch (e) {
       SnackbarHelper.showError(context, 'Failed to delete notification');
+    }
+  }
+
+  void _navigateFromNotification(NotificationModel notification) {
+    final type = notification.type.toLowerCase();
+
+    if (!notification.isRead) {
+      _markAsRead(notification);
+    }
+
+    switch (type) {
+      case 'bill_created':
+      case 'bill_paid':
+      case 'bill_partially_paid':
+      case 'bill_fine_applied':
+      case 'payment_reminder':
+      case 'payment':
+        Navigator.of(context).pushNamed('/tenant-payments');
+        break;
+
+      case 'maintenance_created':
+      case 'maintenance_started':
+      case 'maintenance_completed':
+      case 'maintenance_reminder':
+      case 'maintenance':
+        Navigator.of(context).pushNamed('/tenant-maintenance');
+        break;
+
+      case 'document_reminder':
+      case 'efrro_expiry':
+      case 'document':
+        Navigator.of(context).pushNamed('/tenant-documents');
+        break;
+
+      default:
+        Navigator.pop(context);
+        break;
     }
   }
 
@@ -189,7 +209,9 @@ class _NotificationScreenState extends State<NotificationScreen>
   Color _getTypeColor(String type) {
     if (type.contains('bill')) return Colors.orange;
     if (type.contains('maintenance')) return Colors.blue;
-    if (type.contains('document') || type.contains('efrro')) return Colors.purple;
+    if (type.contains('document') || type.contains('efrro')) {
+      return Colors.purple;
+    }
     if (type.contains('payment')) return Colors.red;
     return kLivinkeyGreen;
   }
@@ -234,7 +256,8 @@ class _NotificationScreenState extends State<NotificationScreen>
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.white.withOpacity(0.08)),
             ),
-            child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 22),
+            child: const Icon(Icons.arrow_back_rounded,
+                color: Colors.white, size: 22),
           ),
           onPressed: () => Navigator.pop(context),
         ),
@@ -248,7 +271,8 @@ class _NotificationScreenState extends State<NotificationScreen>
           ),
         ),
         actions: [
-          if (_notifications.isNotEmpty && _notifications.any((n) => !n.isRead))
+          if (_notifications.isNotEmpty &&
+              _notifications.any((n) => !n.isRead))
             TextButton(
               onPressed: _markAllAsRead,
               child: Text(
@@ -290,8 +314,8 @@ class _NotificationScreenState extends State<NotificationScreen>
                             height: 1,
                           ),
                           itemBuilder: (context, index) {
-                            final notification = _notifications[index];
-                            return _buildNotificationItem(notification);
+                            return _buildNotificationItem(
+                                _notifications[index]);
                           },
                         ),
                 ),
@@ -339,9 +363,6 @@ class _NotificationScreenState extends State<NotificationScreen>
     );
   }
 
-  // ============================================================
-  // FIXED: Notification item with proper read handling
-  // ============================================================
   Widget _buildNotificationItem(NotificationModel notification) {
     final String key = notification.id.toString();
     final bool isUnread = !notification.isRead;
@@ -362,24 +383,14 @@ class _NotificationScreenState extends State<NotificationScreen>
           size: 24,
         ),
       ),
-      onDismissed: (direction) {
-        _deleteNotification(notification);
-      },
+      onDismissed: (_) => _deleteNotification(notification),
       child: GestureDetector(
-        onTap: () {
-          if (isUnread) {
-            _markAsRead(notification);
-          }
-          // Navigate to action route if available
-          if (notification.link != null) {
-            Navigator.pop(context, notification.link);
-          }
-        },
+        onTap: () => _navigateFromNotification(notification),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
           decoration: BoxDecoration(
-            color: isUnread 
-                ? kLivinkeyGreen.withOpacity(0.06) 
+            color: isUnread
+                ? kLivinkeyGreen.withOpacity(0.06)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
             border: isUnread
@@ -416,15 +427,20 @@ class _NotificationScreenState extends State<NotificationScreen>
                           child: Text(
                             notification.title,
                             style: TextStyle(
-                              color: isUnread ? Colors.white : Colors.white.withOpacity(0.6),
+                              color: isUnread
+                                  ? Colors.white
+                                  : Colors.white.withOpacity(0.6),
                               fontSize: 14,
-                              fontWeight: isUnread ? FontWeight.w700 : FontWeight.w500,
+                              fontWeight: isUnread
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
                             ),
                           ),
                         ),
                         if (!isUnread)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.08),
                               borderRadius: BorderRadius.circular(8),
@@ -442,7 +458,7 @@ class _NotificationScreenState extends State<NotificationScreen>
                           Container(
                             width: 8,
                             height: 8,
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               color: kLivinkeyGreen,
                               shape: BoxShape.circle,
                             ),
@@ -453,8 +469,8 @@ class _NotificationScreenState extends State<NotificationScreen>
                     Text(
                       notification.message,
                       style: TextStyle(
-                        color: isUnread 
-                            ? Colors.white.withOpacity(0.8) 
+                        color: isUnread
+                            ? Colors.white.withOpacity(0.8)
                             : Colors.white.withOpacity(0.5),
                         fontSize: 13,
                         height: 1.4,

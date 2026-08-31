@@ -13,21 +13,16 @@ import 'screens/guest/guest_screen.dart';
 import 'services/api_service.dart';
 import 'models/auth_models.dart';
 import 'widgets/livinkey_logo.dart' hide kLivinkeyBlack, kLivinkeyGreen;
-
-// NEW: Import push notification service
 import 'services/push_notification_service.dart';
+import 'services/notification_service.dart';
+import 'widgets/common/unread_notifications_modal.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // ============================================================
-  // FIXED: Initialize Firebase only, NOT the full push service
-  // PushNotificationService.initialize() will be called AFTER login
-  // so the user is authenticated when saving FCM token.
-  // ============================================================
+
   final pushService = PushNotificationService();
   await pushService.initializeFirebaseOnly();
-  
+
   runApp(const LivinkeyApp());
 }
 
@@ -39,7 +34,6 @@ class LivinkeyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Livinkey',
       debugShowCheckedModeBanner: false,
-      // NEW: Use the global navigator key for navigation from notifications
       navigatorKey: navigatorKey,
       theme: ThemeData(
         scaffoldBackgroundColor: kLivinkeyBlack,
@@ -51,7 +45,6 @@ class LivinkeyApp extends StatelessWidget {
       ),
       home: const AuthGuard(),
       navigatorObservers: [RouteObserver()],
-      // NEW: Named routes for navigation from notifications
       routes: {
         '/tenant-home': (context) => const TenantScreen(),
         '/tenant-payments': (context) => const PaymentsScreen(),
@@ -69,20 +62,110 @@ class AuthGuard extends StatefulWidget {
   State<AuthGuard> createState() => _AuthGuardState();
 }
 
-class _AuthGuardState extends State<AuthGuard> {
+class _AuthGuardState extends State<AuthGuard> with WidgetsBindingObserver {
   bool _isLoading = true;
   String? _initialRoute;
   final ApiService _api = ApiService();
+  bool _isTenant = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkAuth();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // App came back to foreground
+      _onAppResumed();
+    }
+  }
+
+  Future<void> _onAppResumed() async {
+    if (_initialRoute == 'tenant' || _initialRoute == 'guest') {
+      final isTenant = _initialRoute == 'tenant';
+      await PushNotificationService().onAppResumed(isTenant: isTenant);
+      await NotificationService().refresh(isTenant: isTenant);
+
+      // Show unread modal if there are unread notifications
+      _showUnreadModalIfNeeded(isTenant: isTenant);
+    }
+  }
+
+  Future<void> _showUnreadModalIfNeeded({required bool isTenant}) async {
+    // Small delay so the current route is fully built
+    await Future.delayed(const Duration(milliseconds: 600));
+
+    final unread = NotificationService().unreadNotifications;
+    if (unread.isEmpty) return;
+
+    final navContext = navigatorKey.currentContext;
+    if (navContext == null) return;
+
+    // Avoid showing the modal if one is already open
+    if (ModalRoute.of(navContext)?.isCurrent != true) return;
+
+    showDialog(
+      context: navContext,
+      barrierDismissible: true,
+      builder: (_) => UnreadNotificationsModal(
+        notifications: unread,
+        isTenant: isTenant,
+        onMarkAllRead: () async {
+          await NotificationService().markAllAsRead(isTenant: isTenant);
+        },
+        onTapNotification: (notification) async {
+          await NotificationService()
+              .markAsRead(notification.id, isTenant: isTenant);
+          // Navigate based on type
+          _navigateFromNotification(notification);
+        },
+      ),
+    );
+  }
+
+  void _navigateFromNotification(NotificationModel notification) {
+    final type = (notification.type ?? '').toLowerCase();
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
+
+    switch (type) {
+      case 'bill_created':
+      case 'bill_paid':
+      case 'bill_partially_paid':
+      case 'bill_fine_applied':
+      case 'payment_reminder':
+      case 'payment':
+        nav.pushNamed('/tenant-payments');
+        break;
+      case 'maintenance_created':
+      case 'maintenance_started':
+      case 'maintenance_completed':
+      case 'maintenance_reminder':
+      case 'maintenance':
+        nav.pushNamed('/tenant-maintenance');
+        break;
+      case 'document_reminder':
+      case 'efrro_expiry':
+      case 'document':
+        nav.pushNamed('/tenant-documents');
+        break;
+      default:
+        nav.pushNamed('/tenant-home');
+    }
   }
 
   Future<void> _checkAuth() async {
     await _api.init();
-    
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(kStorageToken);
@@ -92,11 +175,13 @@ class _AuthGuardState extends State<AuthGuard> {
       if (token != null && token.isNotEmpty && userJson != null) {
         try {
           final user = UserModel.fromJson(jsonDecode(userJson));
-          
+
           if (role == 'tenant' || user.role == 'tenant') {
             _initialRoute = 'tenant';
+            _isTenant = true;
           } else if (role == 'guest' || user.role == 'guest') {
             _initialRoute = 'guest';
+            _isTenant = false;
           } else {
             _initialRoute = 'splash';
           }
@@ -112,6 +197,16 @@ class _AuthGuardState extends State<AuthGuard> {
 
     if (mounted) {
       setState(() => _isLoading = false);
+
+      // After first paint, if user is logged in, refresh + show modal
+      if (_initialRoute == 'tenant' || _initialRoute == 'guest') {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await NotificationService().initialize(isTenant: _isTenant);
+          await PushNotificationService().initialize();
+          await PushNotificationService().retryPendingToken();
+          _showUnreadModalIfNeeded(isTenant: _isTenant);
+        });
+      }
     }
   }
 
