@@ -410,22 +410,28 @@ class NotificationModel {
     if (value is bool) return value;
     if (value is int) return value == 1;
     if (value is String) {
-      final lower = value.toLowerCase();
-      return lower == 'true' || lower == '1';
+      final lower = value.toLowerCase().trim();
+      return lower == 'true' || lower == '1' || lower == 'yes';
     }
     return false;
   }
 
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
+    // Backend may send is_read, isRead, or read
+    final rawRead = json.containsKey('is_read')
+        ? json['is_read']
+        : (json.containsKey('isRead')
+            ? json['isRead']
+            : json['read']);
     return NotificationModel(
       id: _parseInt(json['id']),
       title: json['title'] ?? '',
-      message: json['message'] ?? '',
+      message: json['message'] ?? json['body'] ?? '',
       type: json['type'] ?? 'general',
-      createdAt: _parseDateTime(json['created_at']),
-      isRead: _parseBool(json['is_read']),
-      entityId: _parseInt(json['entity_id']),
-      entityType: json['entity_type'],
+      createdAt: _parseDateTime(json['created_at'] ?? json['createdAt']),
+      isRead: _parseBool(rawRead),
+      entityId: _parseInt(json['entity_id'] ?? json['entityId']),
+      entityType: json['entity_type'] ?? json['entityType'],
       link: json['link'],
       icon: json['icon'],
       color: json['color'],

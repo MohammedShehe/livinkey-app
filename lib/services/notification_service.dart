@@ -14,6 +14,7 @@ class NotificationService {
   List<NotificationModel> _notifications = [];
   int _unreadCount = 0;
   bool _isInitialized = false;
+  bool? _lastIsTenant;
 
   Stream<List<NotificationModel>> get notificationsStream =>
       _notificationsController.stream;
@@ -21,14 +22,20 @@ class NotificationService {
   List<NotificationModel> get notifications => List.from(_notifications);
   int get unreadCount => _unreadCount;
 
-  // Stream for unread count so UI can react
   final StreamController<int> _unreadCountController =
       StreamController<int>.broadcast();
   Stream<int> get unreadCountStream => _unreadCountController.stream;
 
+  /// Initialize (or re-init when role changes). Always refreshes.
   Future<void> initialize({bool isTenant = true}) async {
-    if (_isInitialized) return;
+    // Allow re-init when switching tenant <-> guest
+    if (_isInitialized && _lastIsTenant == isTenant) {
+      // Already correct role – still refresh so data is fresh
+      await refresh(isTenant: isTenant);
+      return;
+    }
     _isInitialized = true;
+    _lastIsTenant = isTenant;
     await refresh(isTenant: isTenant);
   }
 
@@ -48,6 +55,7 @@ class NotificationService {
     if (value == null) return 0;
     if (value is int) return value;
     if (value is String) return int.tryParse(value) ?? 0;
+    if (value is num) return value.toInt();
     return 0;
   }
 
@@ -55,7 +63,9 @@ class NotificationService {
     try {
       final countRes = await _api.getUnreadTenantCount();
       if (countRes['success'] == true) {
-        final count = countRes['unreadCount'];
+        final count = countRes['unreadCount'] ??
+            countRes['unread_count'] ??
+            countRes['count'];
         if (count != null) {
           _unreadCount = _safeParseInt(count);
           _unreadCountController.add(_unreadCount);
@@ -69,6 +79,11 @@ class NotificationService {
         if (data is List) {
           _notifications =
               data.map((n) => NotificationModel.fromJson(n)).toList();
+          final listUnread = _notifications.where((n) => !n.isRead).length;
+          if (listUnread > _unreadCount) {
+            _unreadCount = listUnread;
+            _unreadCountController.add(_unreadCount);
+          }
           _notificationsController.add(List.from(_notifications));
         }
       }
@@ -81,7 +96,9 @@ class NotificationService {
     try {
       final countRes = await _api.getUnreadGuestCount();
       if (countRes['success'] == true) {
-        final count = countRes['unreadCount'];
+        final count = countRes['unreadCount'] ??
+            countRes['unread_count'] ??
+            countRes['count'];
         if (count != null) {
           _unreadCount = _safeParseInt(count);
           _unreadCountController.add(_unreadCount);
@@ -95,12 +112,44 @@ class NotificationService {
         if (data is List) {
           _notifications =
               data.map((n) => NotificationModel.fromJson(n)).toList();
+          final listUnread = _notifications.where((n) => !n.isRead).length;
+          if (listUnread > _unreadCount) {
+            _unreadCount = listUnread;
+            _unreadCountController.add(_unreadCount);
+          }
           _notificationsController.add(List.from(_notifications));
         }
       }
     } catch (e) {
       // ignore
     }
+  }
+
+  /// Fetch unread notifications specifically (preferred for the modal).
+  /// Falls back to filtering the cached list if the unread endpoint fails.
+  Future<List<NotificationModel>> fetchUnreadNotifications({
+    required bool isTenant,
+  }) async {
+    try {
+      final response = isTenant
+          ? await _api.getUnreadTenantNotifications(limit: 50)
+          : await _api.getUnreadGuestNotifications(limit: 50);
+
+      if (response['success'] == true && response['data'] != null) {
+        final data = response['data'];
+        if (data is List && data.isNotEmpty) {
+          final list =
+              data.map((n) => NotificationModel.fromJson(n)).toList();
+          // Ensure they are treated as unread for the modal
+          return list.map((n) => n.copyWith(isRead: false)).toList();
+        }
+      }
+    } catch (_) {
+      // fall through to cached filter
+    }
+
+    // Fallback: filter current list
+    return _notifications.where((n) => !n.isRead).toList();
   }
 
   Future<void> markAsRead(int id, {bool isTenant = true}) async {
@@ -132,9 +181,8 @@ class NotificationService {
         await _api.markAllGuestNotificationsRead();
       }
 
-      _notifications = _notifications
-          .map((n) => n.copyWith(isRead: true))
-          .toList();
+      _notifications =
+          _notifications.map((n) => n.copyWith(isRead: true)).toList();
       _unreadCount = 0;
       _unreadCountController.add(0);
       _notificationsController.add(List.from(_notifications));
@@ -164,6 +212,14 @@ class NotificationService {
 
   List<NotificationModel> get unreadNotifications =>
       _notifications.where((n) => !n.isRead).toList();
+
+  /// Reset so next login / role switch can re-initialize cleanly
+  void reset() {
+    _isInitialized = false;
+    _lastIsTenant = null;
+    _notifications = [];
+    _unreadCount = 0;
+  }
 
   void dispose() {
     _notificationsController.close();

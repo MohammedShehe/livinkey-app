@@ -89,6 +89,8 @@ class _AuthGuardState extends State<AuthGuard> with WidgetsBindingObserver {
     }
   }
 
+  bool _isShowingUnreadModal = false;
+
   Future<void> _onAppResumed() async {
     if (_initialRoute == 'tenant' || _initialRoute == 'guest') {
       final isTenant = _initialRoute == 'tenant';
@@ -96,40 +98,60 @@ class _AuthGuardState extends State<AuthGuard> with WidgetsBindingObserver {
       await NotificationService().refresh(isTenant: isTenant);
 
       // Show unread modal if there are unread notifications
-      _showUnreadModalIfNeeded(isTenant: isTenant);
+      await _showUnreadModalIfNeeded(isTenant: isTenant);
     }
   }
 
   Future<void> _showUnreadModalIfNeeded({required bool isTenant}) async {
-    // Small delay so the current route is fully built
-    await Future.delayed(const Duration(milliseconds: 600));
+    // Wait for the navigator + home screen to be fully ready
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
+    if (_isShowingUnreadModal) return;
 
-    final unread = NotificationService().unreadNotifications;
+    // Prefer the dedicated unread endpoint (matches the bell badge source)
+    List<NotificationModel> unread =
+        await NotificationService().fetchUnreadNotifications(isTenant: isTenant);
+
+    // Fallback: if count says there are unread but list is empty, refresh once more
+    if (unread.isEmpty && NotificationService().unreadCount > 0) {
+      await NotificationService().refresh(isTenant: isTenant);
+      unread = await NotificationService()
+          .fetchUnreadNotifications(isTenant: isTenant);
+      if (unread.isEmpty) {
+        // Last resort: use whatever is in the local cache marked unread
+        unread = NotificationService().unreadNotifications;
+      }
+    }
+
     if (unread.isEmpty) return;
 
+    final nav = navigatorKey.currentState;
     final navContext = navigatorKey.currentContext;
-    if (navContext == null) return;
+    if (nav == null || navContext == null) return;
+    if (!navContext.mounted) return;
 
-    // Avoid showing the modal if one is already open
-    if (ModalRoute.of(navContext)?.isCurrent != true) return;
-
-    showDialog(
-      context: navContext,
-      barrierDismissible: true,
-      builder: (_) => UnreadNotificationsModal(
-        notifications: unread,
-        isTenant: isTenant,
-        onMarkAllRead: () async {
-          await NotificationService().markAllAsRead(isTenant: isTenant);
-        },
-        onTapNotification: (notification) async {
-          await NotificationService()
-              .markAsRead(notification.id, isTenant: isTenant);
-          // Navigate based on type
-          _navigateFromNotification(notification);
-        },
-      ),
-    );
+    _isShowingUnreadModal = true;
+    try {
+      await showDialog(
+        context: navContext,
+        barrierDismissible: true,
+        useRootNavigator: true,
+        builder: (_) => UnreadNotificationsModal(
+          notifications: unread,
+          isTenant: isTenant,
+          onMarkAllRead: () async {
+            await NotificationService().markAllAsRead(isTenant: isTenant);
+          },
+          onTapNotification: (notification) async {
+            await NotificationService()
+                .markAsRead(notification.id, isTenant: isTenant);
+            _navigateFromNotification(notification);
+          },
+        ),
+      );
+    } finally {
+      _isShowingUnreadModal = false;
+    }
   }
 
   void _navigateFromNotification(NotificationModel notification) {
@@ -204,7 +226,9 @@ class _AuthGuardState extends State<AuthGuard> with WidgetsBindingObserver {
           await NotificationService().initialize(isTenant: _isTenant);
           await PushNotificationService().initialize();
           await PushNotificationService().retryPendingToken();
-          _showUnreadModalIfNeeded(isTenant: _isTenant);
+          // Force a fresh unread fetch then show modal
+          await NotificationService().refresh(isTenant: _isTenant);
+          await _showUnreadModalIfNeeded(isTenant: _isTenant);
         });
       }
     }
