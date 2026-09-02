@@ -103,6 +103,7 @@ class _NotificationScreenState extends State<NotificationScreen>
 
     try {
       await _notificationService.markAsRead(notification.id, isTenant: true);
+      if (!mounted) return;
       setState(() {
         final index = _notifications.indexWhere((n) => n.id == notification.id);
         if (index != -1) {
@@ -110,7 +111,9 @@ class _NotificationScreenState extends State<NotificationScreen>
         }
       });
     } catch (e) {
-      SnackbarHelper.showError(context, 'Failed to mark as read');
+      if (mounted) {
+        SnackbarHelper.showError(context, 'Failed to mark as read');
+      }
     }
   }
 
@@ -119,26 +122,50 @@ class _NotificationScreenState extends State<NotificationScreen>
 
     try {
       await _notificationService.markAllAsRead(isTenant: true);
+      if (!mounted) return;
       setState(() {
         _notifications =
             _notifications.map((n) => n.copyWith(isRead: true)).toList();
       });
       SnackbarHelper.showSuccess(context, 'All notifications marked as read');
     } catch (e) {
-      SnackbarHelper.showError(context, 'Failed to mark all as read');
+      if (mounted) {
+        SnackbarHelper.showError(context, 'Failed to mark all as read');
+      }
     }
   }
 
-  Future<void> _deleteNotification(NotificationModel notification) async {
+  /// Remove from UI immediately (required by Dismissible), then call API.
+  void _onDismissed(NotificationModel notification) {
+    if (!mounted) return;
+    // Must remove the widget from the tree RIGHT AWAY or Flutter asserts
+    setState(() {
+      _notifications.removeWhere((n) => n.id == notification.id);
+    });
+    _deleteNotificationInBackground(notification);
+  }
+
+  Future<void> _deleteNotificationInBackground(
+      NotificationModel notification) async {
     try {
-      await _notificationService.deleteNotification(notification.id,
-          isTenant: true);
-      setState(() {
-        _notifications.removeWhere((n) => n.id == notification.id);
-      });
+      await _notificationService.deleteNotification(
+        notification.id,
+        isTenant: true,
+      );
+      if (!mounted) return;
       SnackbarHelper.show(context, 'Notification dismissed');
     } catch (e) {
-      SnackbarHelper.showError(context, 'Failed to delete notification');
+      if (!mounted) return;
+      // Restore item if delete failed
+      setState(() {
+        if (!_notifications.any((n) => n.id == notification.id)) {
+          _notifications.insert(0, notification);
+        }
+      });
+      SnackbarHelper.showError(
+        context,
+        'Could not delete notification. Please try again.',
+      );
     }
   }
 
@@ -383,7 +410,7 @@ class _NotificationScreenState extends State<NotificationScreen>
           size: 24,
         ),
       ),
-      onDismissed: (_) => _deleteNotification(notification),
+      onDismissed: (_) => _onDismissed(notification),
       child: GestureDetector(
         onTap: () => _navigateFromNotification(notification),
         child: Container(
