@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:livinkey/screens/guest/guest_feedback_screen.dart';
 
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
@@ -12,7 +11,7 @@ import '../../models/pg_model.dart';
 import '../../widgets/common/snackbar_helper.dart';
 import '../common/notification_screen.dart';
 import 'guest_screen.dart';
-import '../guest/guest_feedback_screen.dart'; 
+import 'guest_feedback_screen.dart';
 
 class GuestHomeScreen extends StatefulWidget {
   const GuestHomeScreen({super.key});
@@ -168,7 +167,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
       
     } catch (e) {
       if (mounted) {
-        SnackbarHelper.showError(context, 'Failed to load data');
+        SnackbarHelper.showError(context, 'Unable to load PGs right now. Please pull to refresh or try again later.');
       }
     } finally {
       if (mounted) {
@@ -258,13 +257,38 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(kLivinkeyGreen),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: kLivinkeyGreen.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: kLivinkeyGreen.withOpacity(0.15)),
+                ),
+                child: const SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(kLivinkeyGreen),
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               Text(
-                'Loading...',
-                style: TextStyle(color: Colors.white.withOpacity(0.5)),
+                'Loading PGs...',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Please wait a moment',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.35),
+                  fontSize: 12.5,
+                ),
               ),
             ],
           ),
@@ -377,8 +401,9 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Compact header so the PG list gets maximum vertical space on small devices
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 2),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -386,7 +411,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                         children: [
                           Container(
                             width: 3,
-                            height: 14,
+                            height: 12,
                             decoration: BoxDecoration(
                               color: kLivinkeyGreen,
                               borderRadius: BorderRadius.circular(4),
@@ -397,13 +422,13 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                             _greeting,
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.5),
-                              fontSize: 13,
+                              fontSize: 12,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Padding(
                         padding: const EdgeInsets.only(left: 11),
                         child: ShaderMask(
@@ -414,17 +439,19 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                             _guestName,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 26,
+                              fontSize: 22,
                               fontWeight: FontWeight.w800,
                               letterSpacing: -0.5,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
                       if (_isTenantViewingAsGuest)
                         Container(
-                          margin: const EdgeInsets.only(top: 6),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: kLivinkeyGreen.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(10),
@@ -436,14 +463,14 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                               Icon(
                                 Icons.info_outline,
                                 color: kLivinkeyGreen.withOpacity(0.8),
-                                size: 14,
+                                size: 12,
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 'Viewing as Guest',
                                 style: TextStyle(
                                   color: kLivinkeyGreen.withOpacity(0.8),
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -453,43 +480,44 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                     ],
                   ),
                 ),
+                // More compact promo / stats card
                 Container(
-                  margin: const EdgeInsets.fromLTRB(20, 14, 20, 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                  margin: const EdgeInsets.fromLTRB(20, 10, 20, 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [kLivinkeyGreen.withOpacity(0.14), kLivinkeyGreen.withOpacity(0.02)],
                     ),
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: kLivinkeyGreen.withOpacity(0.18)),
                     boxShadow: [
                       BoxShadow(
                         color: kLivinkeyGreen.withOpacity(0.06),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
                       ),
                     ],
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(colors: [kLivinkeyGreen, Color(0xFF66BB6A)]),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(10),
                           boxShadow: [
                             BoxShadow(
-                              color: kLivinkeyGreen.withOpacity(0.4),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+                              color: kLivinkeyGreen.withOpacity(0.35),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
                             ),
                           ],
                         ),
-                        child: const Icon(Icons.home_rounded, color: Colors.black, size: 20),
+                        child: const Icon(Icons.home_rounded, color: Colors.black, size: 18),
                       ),
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,11 +528,11 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                                   : 'Find your perfect home',
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.95),
-                                fontSize: 14.5,
+                                fontSize: 13.5,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            const SizedBox(height: 3),
+                            const SizedBox(height: 2),
                             Text(
                               _totalPGs > 0 
                                   ? '$_totalPGs PGs available right now'
@@ -513,7 +541,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                                 color: _totalPGs > 0 
                                     ? Colors.white.withOpacity(0.55) 
                                     : Colors.orange.withOpacity(0.7),
-                                fontSize: 12.5,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -522,17 +550,17 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                       ),
                       if (_vacantCount > 0)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             color: kLivinkeyGreen.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: kLivinkeyGreen.withOpacity(0.3)),
                           ),
                           child: Text(
                             '$_vacantCount Vacant',
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: kLivinkeyGreen,
-                              fontSize: 11,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -540,33 +568,35 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                     ],
                   ),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 12),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
                     child: Row(
                       children: [
                         _buildFilterChip('All', Icons.grid_view_rounded),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
                         _buildFilterChip('Vacant', Icons.check_circle_outline_rounded),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
                         _buildFilterChip('Full Occupied', Icons.block_rounded),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
+                // Main list area – Expanded so it occupies all remaining vertical space
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 0, 20, bottomNavHeight + bottomSafeArea + 8),
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, bottomNavHeight + bottomSafeArea + 4),
                     child: _filteredPgs.isEmpty
                         ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.all(24),
+                                  padding: const EdgeInsets.all(20),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withOpacity(0.04),
                                     shape: BoxShape.circle,
@@ -574,15 +604,15 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                                   child: Icon(
                                     Icons.home_work_rounded,
                                     color: Colors.white.withOpacity(0.15),
-                                    size: 56,
+                                    size: 48,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 14),
                                 Text(
                                   _allPgs.isEmpty ? 'No PGs available' : 'No matching PGs',
                                   style: TextStyle(
                                     color: Colors.white.withOpacity(0.4),
-                                    fontSize: 15,
+                                    fontSize: 14.5,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -593,13 +623,13 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                                       : 'Try a different filter',
                                   style: TextStyle(
                                     color: Colors.white.withOpacity(0.2),
-                                    fontSize: 12.5,
+                                    fontSize: 12,
                                   ),
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 10),
                                 TextButton(
                                   onPressed: _handleRefresh,
-                                  child: Text(
+                                  child: const Text(
                                     'Refresh',
                                     style: TextStyle(
                                       color: kLivinkeyGreen,
@@ -612,24 +642,24 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                           )
                         : GridView.builder(
                             physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                            padding: const EdgeInsets.only(bottom: 20),
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 14,
-                              mainAxisSpacing: 14,
-                              childAspectRatio: 0.75,
+                            padding: const EdgeInsets.only(bottom: 12),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: MediaQuery.of(context).size.width < 360 ? 1 : 2,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: MediaQuery.of(context).size.width < 360 ? 1.35 : 0.78,
                             ),
                             itemCount: _filteredPgs.length,
                             itemBuilder: (context, index) {
                               return TweenAnimationBuilder<double>(
-                                duration: Duration(milliseconds: 350 + (index * 60)),
+                                duration: Duration(milliseconds: 300 + (index * 40)),
                                 curve: Curves.easeOutCubic,
                                 tween: Tween(begin: 0.0, end: 1.0),
                                 builder: (context, value, child) {
                                   return Opacity(
                                     opacity: value,
                                     child: Transform.translate(
-                                      offset: Offset(0, 16 * (1 - value)),
+                                      offset: Offset(0, 12 * (1 - value)),
                                       child: child,
                                     ),
                                   );

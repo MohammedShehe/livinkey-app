@@ -29,6 +29,7 @@ class GuestScreenState extends State<GuestScreen> {
   final NotificationService _notificationService = NotificationService();
   final ApiService _api = ApiService();
   int _unreadCount = 0;
+  bool _isTenantViewingAsGuest = false;
 
   static const List<Widget> _screens = [
     GuestHomeScreen(),
@@ -42,12 +43,39 @@ class GuestScreenState extends State<GuestScreen> {
     _pageController = PageController(initialPage: 0);
     _notificationService.initialize(isTenant: false);
     _updateUnreadCount();
+    _checkIfTenantViewingAsGuest();
 
     _notificationService.notificationsStream.listen((_) {
       if (mounted) {
         _updateUnreadCount();
       }
     });
+  }
+
+  Future<void> _checkIfTenantViewingAsGuest() async {
+    try {
+      // Role stays as tenant when they enter guest mode (no token switch)
+      final role = await _api.getStoredRole();
+      if (mounted) {
+        setState(() {
+          _isTenantViewingAsGuest = role == 'tenant';
+        });
+      }
+    } catch (_) {
+      // Ignore – treat as pure guest
+    }
+  }
+
+  void _returnToTenant() {
+    HapticFeedback.mediumImpact();
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      SnackbarHelper.showInfo(context, 'Welcome back to your tenant dashboard');
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const TenantScreen()),
+      );
+    }
   }
 
   @override
@@ -427,6 +455,60 @@ class GuestScreenState extends State<GuestScreen> {
               },
               children: _screens,
             ),
+            // ============================================================
+            // Return-to-Tenant floating control (only for tenants visiting as guest)
+            // Positioned so it does not interfere with the 3 main tabs
+            // ============================================================
+            if (_isTenantViewingAsGuest)
+              Positioned(
+                right: 20,
+                bottom: 100 + MediaQuery.of(context).padding.bottom,
+                child: Material(
+                  color: Colors.transparent,
+                  elevation: 8,
+                  borderRadius: BorderRadius.circular(28),
+                  child: InkWell(
+                    onTap: _returnToTenant,
+                    borderRadius: BorderRadius.circular(28),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFF9800), Color(0xFFF57C00)],
+                        ),
+                        borderRadius: BorderRadius.circular(28),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFF9800).withOpacity(0.45),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.home_work_rounded, color: Colors.white, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Back to Tenant',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
         bottomNavigationBar: Padding(

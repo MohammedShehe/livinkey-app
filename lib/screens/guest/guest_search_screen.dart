@@ -81,10 +81,16 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
         _allPgs = data.map((pg) => PgModel.fromJson(pg)).toList();
         _searchResults = _allPgs;
       } else {
-        SnackbarHelper.showError(context, response['message'] ?? 'Failed to load PGs');
+        SnackbarHelper.showError(
+          context,
+          response['message'] ?? 'Unable to load PGs. Please try again.',
+        );
       }
     } catch (e) {
-      SnackbarHelper.showError(context, 'Failed to load PGs');
+      SnackbarHelper.showError(
+        context,
+        'Unable to load PGs right now. Please check your connection and try again.',
+      );
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -146,9 +152,39 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(kLivinkeyGreen)),
-              const SizedBox(height: 16),
-              Text('Loading PGs...', style: TextStyle(color: Colors.white.withOpacity(0.5))),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: kLivinkeyGreen.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: kLivinkeyGreen.withOpacity(0.15)),
+                ),
+                child: const SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(kLivinkeyGreen),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Searching PGs...',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Please wait a moment',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.35),
+                  fontSize: 12.5,
+                ),
+              ),
             ],
           ),
         ),
@@ -239,8 +275,9 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
             position: _slideAnimation,
             child: Column(
               children: [
+                // Compact search bar so results list gets more space
                 Container(
-                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 220),
                     curve: Curves.easeOut,
@@ -252,26 +289,26 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
                             ? [kLivinkeyGreen.withOpacity(0.10), kLivinkeyGreen.withOpacity(0.03)]
                             : [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.02)],
                       ),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: _isFocused ? kLivinkeyGreen.withOpacity(0.45) : Colors.white.withOpacity(0.08),
                         width: _isFocused ? 1.5 : 1,
                       ),
                       boxShadow: _isFocused
-                          ? [BoxShadow(color: kLivinkeyGreen.withOpacity(0.12), blurRadius: 18, offset: const Offset(0, 6))]
+                          ? [BoxShadow(color: kLivinkeyGreen.withOpacity(0.12), blurRadius: 14, offset: const Offset(0, 4))]
                           : [],
                     ),
                     child: TextField(
                       controller: _searchController,
                       focusNode: _searchFocusNode,
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                      style: const TextStyle(color: Colors.white, fontSize: 14.5, fontWeight: FontWeight.w500),
                       decoration: InputDecoration(
-                        hintText: 'Search by name, location, rent, amenities...',
-                        hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 13.5),
+                        hintText: 'Search by name, location, rent...',
+                        hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 13),
                         prefixIcon: Icon(
                           Icons.search_rounded,
                           color: _isFocused ? kLivinkeyGreen : kLivinkeyGreen.withOpacity(0.6),
-                          size: 22,
+                          size: 20,
                         ),
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
@@ -298,18 +335,18 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
                               )
                             : null,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
                         ),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(14),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         isDense: true,
                       ),
                       onChanged: (value) {
@@ -320,12 +357,12 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
                 ),
 
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
                       Container(
                         width: 3,
-                        height: 13,
+                        height: 12,
                         decoration: BoxDecoration(
                           color: kLivinkeyGreen.withOpacity(0.6),
                           borderRadius: BorderRadius.circular(4),
@@ -336,7 +373,7 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
                         '${_searchResults.length} PG${_searchResults.length != 1 ? 's' : ''} found',
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.45),
-                          fontSize: 12.5,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -344,18 +381,19 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
                   ),
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
 
+                // Main results area – Expanded for maximum scroll space
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(20, 0, 20, bottomNavHeight + bottomSafeArea + 16),
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, bottomNavHeight + bottomSafeArea + 4),
                     child: _searchResults.isEmpty
                         ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.all(24),
+                                  padding: const EdgeInsets.all(20),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withOpacity(0.04),
                                     shape: BoxShape.circle,
@@ -363,42 +401,42 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
                                   child: Icon(
                                     Icons.search_off_rounded,
                                     color: Colors.white.withOpacity(0.15),
-                                    size: 56,
+                                    size: 48,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 14),
                                 Text(
                                   'No PGs found',
-                                  style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 15, fontWeight: FontWeight.w600),
+                                  style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 14.5, fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   'Try adjusting your search',
-                                  style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 12.5),
+                                  style: TextStyle(color: Colors.white.withOpacity(0.2), fontSize: 12),
                                 ),
                               ],
                             ),
                           )
                         : GridView.builder(
                             physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                            padding: const EdgeInsets.only(bottom: 20),
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 14,
-                              mainAxisSpacing: 14,
-                              childAspectRatio: 0.75,
+                            padding: const EdgeInsets.only(bottom: 12),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: MediaQuery.of(context).size.width < 360 ? 1 : 2,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: MediaQuery.of(context).size.width < 360 ? 1.35 : 0.78,
                             ),
                             itemCount: _searchResults.length,
                             itemBuilder: (context, index) {
                               return TweenAnimationBuilder<double>(
-                                duration: Duration(milliseconds: 300 + (index * 50)),
+                                duration: Duration(milliseconds: 280 + (index * 40)),
                                 curve: Curves.easeOutCubic,
                                 tween: Tween(begin: 0.0, end: 1.0),
                                 builder: (context, value, child) {
                                   return Opacity(
                                     opacity: value,
                                     child: Transform.translate(
-                                      offset: Offset(0, 14 * (1 - value)),
+                                      offset: Offset(0, 12 * (1 - value)),
                                       child: child,
                                     ),
                                   );
