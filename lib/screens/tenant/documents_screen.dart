@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
@@ -436,6 +437,48 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     }
   }
 
+
+  Future<bool> _openDocumentUrl(String? url) async {
+    if (url == null || url.isEmpty) {
+      if (mounted) {
+        SnackbarHelper.showError(context, 'Document URL not available');
+      }
+      return false;
+    }
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+        return true;
+      }
+      if (mounted) {
+        SnackbarHelper.showError(context, 'Could not open document');
+      }
+      return false;
+    } catch (e) {
+      if (mounted) {
+        SnackbarHelper.showError(context, 'Could not open document');
+      }
+      return false;
+    }
+  }
+
+  /// Prefer dedicated backend download endpoint; fall back to stored document_url.
+  Future<bool> _downloadDocument(Map<String, dynamic> doc) async {
+    final documentId = doc['id'];
+    final fallbackUrl = doc['document_url']?.toString();
+
+    if (documentId != null) {
+      final result = await _api.downloadMyDocument(documentId);
+      if (result['success'] == true && result['url'] != null) {
+        return _openDocumentUrl(result['url']?.toString());
+      }
+      // Fall back to direct URL if endpoint fails (e.g. redirect handling)
+    }
+
+    return _openDocumentUrl(fallbackUrl);
+  }
+
   void _showDocumentPreview(Map<String, dynamic> doc) {
     final docType = doc['document_type']?.toString().replaceAll('_', ' ').toUpperCase() ?? 'Document';
     final docUrl = doc['document_url'];
@@ -550,11 +593,12 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                 children: [
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
-                        if (docUrl != null && docUrl.isNotEmpty) {
-                          // Open URL in browser
-                        }
+                      onPressed: () async {
                         Navigator.pop(context);
+                        final opened = await _downloadDocument(doc);
+                        if (opened && mounted) {
+                          SnackbarHelper.showSuccess(context, 'Opening document...');
+                        }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: kLivinkeyGreen,
@@ -585,13 +629,18 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     if (_isDownloadingAll || _uploadedDocuments.isEmpty) return;
     setState(() => _isDownloadingAll = true);
     try {
+      int opened = 0;
       for (final doc in _uploadedDocuments) {
-        final url = doc['document_url'];
-        if (url != null && url.isNotEmpty) {
-          // Open in browser
+        final ok = await _downloadDocument(doc);
+        if (ok) opened++;
+      }
+      if (mounted) {
+        if (opened > 0) {
+          SnackbarHelper.showSuccess(context, 'Opening $opened document(s)...');
+        } else {
+          SnackbarHelper.showError(context, 'Could not open documents');
         }
       }
-      SnackbarHelper.show(context, 'Downloading all documents...');
     } finally {
       if (mounted) setState(() => _isDownloadingAll = false);
     }
@@ -601,8 +650,26 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     if (_isDownloadingSelected || _selectedIndices.isEmpty) return;
     setState(() => _isDownloadingSelected = true);
     try {
-      final count = _selectedIndices.length;
-      SnackbarHelper.show(context, 'Downloading $count selected documents...');
+      int opened = 0;
+      for (final index in _selectedIndices) {
+        if (index < 0 || index >= _docs.length) continue;
+        final key = _docs[index]['key']?.toString();
+        if (key == null) continue;
+        final uploaded = _getDocument(key);
+        if (uploaded == null) continue;
+        final ok = await _downloadDocument(uploaded);
+        if (ok) opened++;
+      }
+      if (mounted) {
+        if (opened > 0) {
+          SnackbarHelper.showSuccess(context, 'Opening $opened document(s)...');
+        } else {
+          SnackbarHelper.showError(
+            context,
+            'No uploaded documents in selection to download',
+          );
+        }
+      }
       _clearSelection();
     } finally {
       if (mounted) setState(() => _isDownloadingSelected = false);

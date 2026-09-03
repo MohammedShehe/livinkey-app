@@ -1005,6 +1005,62 @@ class ApiService {
     }
   }
 
+
+  /// Dedicated download for the authenticated tenant's own document.
+  /// Calls GET /documents/:documentId/download and returns the file URL
+  /// (backend redirects to the stored document URL after ownership check).
+  Future<Map<String, dynamic>> downloadMyDocument(dynamic documentId) async {
+    try {
+      final response = await _dio.get(
+        '/documents/$documentId/download',
+        options: Options(
+          followRedirects: false,
+          validateStatus: (status) =>
+              status != null && status >= 200 && status < 400,
+        ),
+      );
+
+      // Express res.redirect -> 302 with Location header
+      final location = response.headers.value('location');
+      if (location != null && location.isNotEmpty) {
+        return {'success': true, 'url': location};
+      }
+
+      // Fallback if body contains url
+      if (response.data is Map) {
+        final data = Map<String, dynamic>.from(response.data as Map);
+        if (data['url'] != null) {
+          return {'success': true, 'url': data['url']};
+        }
+        return data;
+      }
+
+      return {'success': false, 'message': 'Download URL not available'};
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        if (e.response!.data is Map) {
+          return Map<String, dynamic>.from(e.response!.data as Map);
+        }
+      }
+      final status = e.response?.statusCode;
+      if (status == 403) {
+        return {
+          'success': false,
+          'message': 'Unauthorized: You can only download your own documents'
+        };
+      }
+      if (status == 404) {
+        return {'success': false, 'message': 'Document not found'};
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'An error occurred. Please try again.'
+      };
+    }
+  }
+
   // ============ NOTIFICATIONS ============
 
   Future<Map<String, dynamic>> getTenantNotifications({int limit = 50, int offset = 0}) async {
