@@ -6,7 +6,7 @@ const Color kLivinkeyBlack = Color(0xFF000000);
 const Color kLivinkeyWhite = Color(0xFFFFFFFF);
 
 // API Configuration
-const String kApiBaseUrl = 'https://livinkey-backend-e15s.onrender.com/api';
+const String kApiBaseUrl = 'https://api.livinkey.com/api';
 
 // Asset paths
 const String kLogoBaseAsset = 'assets/images/livinkey_base_white.png';
