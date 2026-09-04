@@ -1,4 +1,3 @@
-// lib/screens/tenant/payments_screen.dart
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -16,6 +15,7 @@ import '../../widgets/tenant/payment_chip.dart';
 import '../../widgets/common/snackbar_helper.dart';
 import '../../widgets/common/loading_indicator.dart';
 import '../../models/auth_models.dart';
+import '../../models/bill_model.dart';
 import '../common/notification_screen.dart';
 import 'tenant_screen.dart';
 
@@ -291,7 +291,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                     _buildQRSection(),
                     const SizedBox(height: 16),
 
-                    if (_currentBill?.electricityMeterImage != null)
+                    if (_currentBill?.hasMeterImages == true)
                       Column(
                         children: [
                           Row(
@@ -302,7 +302,12 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                                 decoration: BoxDecoration(color: kLivinkeyGreen, borderRadius: BorderRadius.circular(2)),
                               ),
                               const SizedBox(width: 8),
-                              const Text('Electricity Meter', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                              Text(
+                                (_currentBill!.meterImageUrls.length > 1)
+                                    ? 'Electricity Meter Images'
+                                    : 'Electricity Meter',
+                                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 12),
@@ -357,6 +362,21 @@ class _PaymentsScreenState extends State<PaymentsScreen>
               _buildStatItem('Overdue', _currentBill?.isOverdue == true ? 'Yes' : 'No', _currentBill?.isOverdue == true ? Colors.red : kLivinkeyGreen),
             ],
           ),
+          if (hasBill && (_currentBill!.billingMonth != null && _currentBill!.billingMonth!.isNotEmpty)) ...[
+            Divider(color: Colors.white.withOpacity(0.06), height: 24),
+            Row(
+              children: [
+                _buildStatItem('Billing Month', _currentBill!.billingMonth!, Colors.teal),
+                _buildStatItem(
+                  'Period',
+                  (_currentBill!.periodFrom != null && _currentBill!.periodTill != null)
+                      ? '${_getFormattedDate(_currentBill!.periodFrom!)} – ${_getFormattedDate(_currentBill!.periodTill!)}'
+                      : 'N/A',
+                  Colors.tealAccent,
+                ),
+              ],
+            ),
+          ],
           if (hasBill) Divider(color: Colors.white.withOpacity(0.06), height: 24),
           if (hasBill)
             Column(
@@ -599,7 +619,8 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   }
 
   Widget _buildMeterCard() {
-    if (_currentBill?.electricityMeterImage == null) {
+    final urls = _currentBill?.meterImageUrls ?? [];
+    if (urls.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -633,55 +654,116 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Current Meter Reading', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                    Text('August 2026', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11)),
+                    Text(
+                      urls.length > 1 ? 'Meter Readings' : 'Current Meter Reading',
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      urls.length > 1
+                          ? 'Tap an image to view full size'
+                          : 'Tap to view full size',
+                      style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 12),
+                    ),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          GestureDetector(
-            onTap: _showMeterPreview,
-            child: Container(
-              width: double.infinity,
-              height: 140,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+          const SizedBox(height: 14),
+          if (urls.length == 1)
+            GestureDetector(
+              onTap: () => _showMeterFullScreen(urls[0], label: 'Meter Reading'),
+              child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.08)),
-                image: DecorationImage(
-                  image: NetworkImage(_currentBill!.electricityMeterImage!),
-                  fit: BoxFit.cover,
-                ),
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withOpacity(0.5)],
-                  ),
-                ),
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.visibility_rounded, color: Colors.white.withOpacity(0.8), size: 18),
-                        const SizedBox(width: 6),
-                        Text('Tap to preview', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12)),
-                      ],
+                child: AspectRatio(
+                  aspectRatio: 16 / 10,
+                  child: Image.network(
+                    urls[0],
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: Colors.white10,
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.broken_image_outlined, color: Colors.white54),
                     ),
                   ),
                 ),
               ),
+            )
+          else
+            Row(
+              children: [
+                for (int i = 0; i < urls.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 10),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => _showMeterFullScreen(urls[i], label: 'Meter Image ${i + 1}'),
+                      child: Column(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: AspectRatio(
+                              aspectRatio: 1,
+                              child: Image.network(
+                                urls[i],
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  color: Colors.white10,
+                                  alignment: Alignment.center,
+                                  child: const Icon(Icons.broken_image_outlined, color: Colors.white54),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Image ${i + 1}',
+                            style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ),
         ],
+      ),
+    );
+  }
+
+  void _showMeterFullScreen(String url, {String label = 'Meter Reading'}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              child: Center(
+                child: Image.network(
+                  url,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              left: 12,
+              child: Text(label, style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+            ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -784,8 +866,9 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   }
 
   void _showMeterPreview() {
-    if (_currentBill?.electricityMeterImage == null) return;
-    
+    final urls = _currentBill?.meterImageUrls ?? [];
+    if (urls.isEmpty) return;
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -799,21 +882,32 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Electricity Meter', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                height: 280,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.08)),
-                  image: DecorationImage(
-                    image: NetworkImage(_currentBill!.electricityMeterImage!),
-                    fit: BoxFit.contain,
-                  ),
-                ),
+              Text(
+                urls.length > 1 ? 'Electricity Meter Images' : 'Electricity Meter',
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
               ),
+              const SizedBox(height: 16),
+              ...urls.asMap().entries.map((e) {
+                return Padding(
+                  padding: EdgeInsets.only(bottom: e.key < urls.length - 1 ? 12 : 0),
+                  child: GestureDetector(
+                    onTap: () => _showMeterFullScreen(e.value, label: 'Meter Image ${e.key + 1}'),
+                    child: Container(
+                      width: double.infinity,
+                      height: urls.length > 1 ? 180 : 280,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                        image: DecorationImage(
+                          image: NetworkImage(e.value),
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () => Navigator.pop(context),

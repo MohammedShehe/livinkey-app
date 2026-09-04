@@ -635,7 +635,16 @@ class _HomeScreenState extends State<HomeScreen>
                           value: _currentBill != null
                               ? fmtINR(_currentBill!['total_amount'] ?? 0)
                               : 'No Bill',
-                          subtitle: _currentBill?['status'] ?? 'N/A',
+                          subtitle: _currentBill == null
+                              ? 'N/A'
+                              : (() {
+                                  final status = (_currentBill!['status'] ?? 'N/A').toString();
+                                  final month = _currentBill!['billing_month']?.toString();
+                                  if (month != null && month.isNotEmpty) {
+                                    return '$status · $month';
+                                  }
+                                  return status;
+                                })(),
                           color: kLivinkeyGreen,
                           onTap: () => _navigateToTab(1),
                         ),
