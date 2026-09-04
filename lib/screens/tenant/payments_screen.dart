@@ -86,11 +86,14 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     setState(() => _isLoading = true);
     try {
       final billResponse = await _api.getCurrentBill();
-      if (billResponse['success'] && billResponse['data'] != null) {
+      if (billResponse['success'] == true && billResponse['data'] != null) {
         final billData = billResponse['data']['bill'];
-        if (billData != null) {
-          _currentBill = BillModel.fromJson(billData);
-        }
+        _currentBill = billData != null ? BillModel.fromJson(billData) : null;
+      } else if ((billResponse['message']?.toString().toLowerCase() ?? '') == 'no bill found') {
+        // The backend returns 404 when there is no active bill. Clear any
+        // previously loaded bill so a soft-deleted bill cannot remain on
+        // screen after refresh/reload.
+        _currentBill = null;
       }
 
       final historyResponse = await _api.getPaymentHistory();
