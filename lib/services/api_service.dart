@@ -568,6 +568,21 @@ class ApiService {
   }
 
   // ============ TENANT PAYMENTS ============
+  Future<Map<String, dynamic>> generatePartialPaymentQR({
+    required int billId,
+    required double amount,
+  }) async {
+    try {
+      final response = await _dio.post('/tenant-payments/partial-qr', data: {
+        'bill_id': billId,
+        'amount': amount,
+      });
+      return Map<String, dynamic>.from(response.data);
+    } catch (e) {
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
 
   Future<Map<String, dynamic>> getCurrentBill() async {
     try {

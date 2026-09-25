@@ -45,8 +45,13 @@ class _PaymentsScreenState extends State<PaymentsScreen>
 
   final TextEditingController _transactionIdController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
+  final TextEditingController _partialAmountController = TextEditingController();
   bool _isSubmittingProof = false;
   String? _paymentScreenshotPath;
+  String? _partialQrUrl;
+  String? _partialUpiLink;
+  double? _partialAmount;
+  bool _isGeneratingPartialQr = false;
 
   bool _isDownloadingReceipt = false;
   int? _downloadingReceiptId;
@@ -78,6 +83,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     _fadeController.dispose();
     _transactionIdController.dispose();
     _amountController.dispose();
+    _partialAmountController.dispose();
     super.dispose();
   }
 
@@ -291,6 +297,8 @@ class _PaymentsScreenState extends State<PaymentsScreen>
 
                     const SizedBox(height: 20),
                     
+                    _buildPaymentDetailsCard(),
+                    const SizedBox(height: 16),
                     _buildQRSection(),
                     const SizedBox(height: 16),
 
@@ -428,6 +436,129 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     );
   }
 
+  Future<void> _generatePartialQR() async {
+    final bill = _currentBill;
+    final amount = _partialAmount;
+    if (bill == null || amount == null) return;
+    final due = _getTotalDue();
+    if (bill.hasPendingPaymentProof) {
+      SnackbarHelper.showError(context, 'A payment proof is already awaiting admin verification. Please wait before making another payment.');
+      return;
+    }
+    if (bill.hasVerifiedPartial) {
+      SnackbarHelper.showError(context, 'A partial payment has already been made. You must pay the full remaining balance of ${fmtINR(due)}.');
+      return;
+    }
+    if (amount > due + 0.005) {
+      SnackbarHelper.showError(context, 'Amount exceeds the current due of ${fmtINR(due)}.');
+      return;
+    }
+    if (amount < due - 0.005 && amount < due * 0.5 - 0.005) {
+      SnackbarHelper.showError(context, 'Partial payment must be at least 50% of the current due: ${fmtINR(due * 0.5)}. You entered ${fmtINR(amount)}.');
+      return;
+    }
+    setState(() => _isGeneratingPartialQr = true);
+    try {
+      final response = await _api.generatePartialPaymentQR(
+        billId: bill.id,
+        amount: amount,
+      );
+      if (response['success'] == true) {
+        final data = Map<String, dynamic>.from(response['data'] ?? {});
+        setState(() {
+          _partialQrUrl = data['qr_code']?.toString();
+          _partialUpiLink = data['upi_link']?.toString();
+        });
+      } else {
+        SnackbarHelper.showError(context, response['message']?.toString() ?? 'Unable to generate payment QR');
+      }
+    } finally {
+      if (mounted) setState(() => _isGeneratingPartialQr = false);
+    }
+  }
+
+  Future<void> _openUPIPayment(double amount) async {
+    final bill = _currentBill;
+    if (bill == null) return;
+    final response = await _api.generatePartialPaymentQR(billId: bill.id, amount: amount);
+    if (response['success'] != true) {
+      SnackbarHelper.showError(context, response['message']?.toString() ?? 'Unable to open payment app');
+      return;
+    }
+    final data = Map<String, dynamic>.from(response['data'] ?? {});
+    final rawLinks = data['app_links'];
+    final links = rawLinks is Map ? Map<String, dynamic>.from(rawLinks) : <String, dynamic>{};
+    final candidates = <String>[
+      if (links['phonepe']?.toString().isNotEmpty == true) links['phonepe'].toString(),
+      if (links['paytm']?.toString().isNotEmpty == true) links['paytm'].toString(),
+      if (links['googlepay']?.toString().isNotEmpty == true) links['googlepay'].toString(),
+      if (links['upi']?.toString().isNotEmpty == true) links['upi'].toString(),
+      if (data['upi_link']?.toString().isNotEmpty == true) data['upi_link'].toString(),
+    ];
+    for (final link in candidates) {
+      final uri = Uri.tryParse(link);
+      if (uri != null) {
+        try {
+          if (await canLaunchUrl(uri) && await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+            return;
+          }
+        } catch (_) {}
+      }
+    }
+    SnackbarHelper.showError(context, 'No supported UPI payment app is installed on this device. You can scan the QR code instead.');
+  }
+
+  Widget _buildPaymentDetailsCard() {
+    final bill = _currentBill;
+    if (bill == null) return const SizedBox.shrink();
+    final hasBank = [bill.paymentBankName, bill.paymentAccountHolderName, bill.paymentAccountNumber, bill.paymentIfscCode]
+        .every((v) => v != null && v!.trim().isNotEmpty);
+    final hasUpi = bill.paymentUpiId != null && bill.paymentUpiId!.trim().isNotEmpty;
+    if (!hasBank && !hasUpi) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: kLivinkeyGreen.withOpacity(0.15)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Payment Details', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        if (bill.paymentBankName?.isNotEmpty == true) _buildPaymentDetailRow('Bank Name', bill.paymentBankName!),
+        if (bill.paymentAccountHolderName?.isNotEmpty == true) _buildPaymentDetailRow('Account Holder', bill.paymentAccountHolderName!),
+        if (bill.paymentAccountNumber?.isNotEmpty == true) _buildPaymentDetailRow('Account Number', bill.paymentAccountNumber!),
+        if (bill.paymentIfscCode?.isNotEmpty == true) _buildPaymentDetailRow('IFSC', bill.paymentIfscCode!),
+        if (bill.paymentUpiId?.isNotEmpty == true) _buildPaymentDetailRow('UPI ID', bill.paymentUpiId!),
+        if (bill.paymentDetailsQr?.isNotEmpty == true) ...[
+          const SizedBox(height: 10),
+          const Text('Payment QR Code', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: () => _showQRPreview(kLivinkeyGreen, bill.paymentDetailsQr!),
+            child: Container(
+              width: 150, height: 150,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+              child: Image.network(bill.paymentDetailsQr!, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.qr_code_2, size: 80)),
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _buildPaymentDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(width: 115, child: Text(label, style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 12))),
+        Expanded(child: SelectableText(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600))),
+      ]),
+    );
+  }
+
   Widget _buildQRSection() {
     switch (_selectedPaymentMethod) {
       case 0:
@@ -449,17 +580,82 @@ class _PaymentsScreenState extends State<PaymentsScreen>
         return _buildCashPaymentCard();
         
       case 2:
-        final partialAmount = _getTotalDue() * 0.5;
-        
-        return _buildQRCard(
-          title: 'Partial Payment (50%)',
-          subtitle: 'Scan QR to pay partial amount',
-          qrColor: Colors.orange,
-          qrUrl: _currentBill?.partialPaymentQr,
-          amount: partialAmount,
-          isPartial: true,
+        final due = _getTotalDue();
+        final partialLocked = _currentBill?.hasVerifiedPartial == true;
+        final pendingLocked = _currentBill?.hasPendingPaymentProof == true;
+        if (_partialAmount == null || _partialAmount! > due) {
+          _partialAmount = due;
+        }
+        if (partialLocked || pendingLocked) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.orange.withOpacity(0.22)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [const Icon(Icons.info_outline, color: Colors.orange), const SizedBox(width: 10), Expanded(child: Text(
+                  pendingLocked ? 'Payment proof awaiting verification' : 'Partial payment already used for this bill',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                ))]),
+                const SizedBox(height: 8),
+                Text(
+                  pendingLocked
+                      ? 'Please wait until the submitted payment is verified. No second payment can be submitted while it is pending.'
+                      : 'You can no longer make another partial payment. The remaining balance must be paid in full: ${fmtINR(due)}.',
+                  style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 13),
+                ),
+              ],
+            ),
+          );
+        }
+        return Column(
+          children: [
+            TextField(
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'Amount to pay',
+                labelStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                prefixText: '₹ ',
+                prefixStyle: const TextStyle(color: Colors.orange),
+                helperText: 'Minimum 50% of current due; one partial payment per bill.',
+                helperStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.05),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              controller: _partialAmountController..text = _partialAmount?.toStringAsFixed(2) ?? '',
+              onChanged: (v) => _partialAmount = double.tryParse(v),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isGeneratingPartialQr ? null : _generatePartialQR,
+                icon: _isGeneratingPartialQr
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.qr_code_2),
+                label: const Text('Generate QR for this amount'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildQRCard(
+              title: 'Partial Payment',
+              subtitle: 'QR is generated for the amount you entered',
+              qrColor: Colors.orange,
+              qrUrl: _partialQrUrl,
+              amount: _partialAmount,
+              isPartial: true,
+              upiLink: _partialUpiLink,
+            ),
+          ],
         );
-        
+
       default:
         return const SizedBox.shrink();
     }
@@ -472,6 +668,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     String? qrUrl,
     double? amount,
     bool isPartial = false,
+    String? upiLink,
   }) {
     final displayAmount = amount ?? _getTotalDue();
 
@@ -552,10 +749,19 @@ class _PaymentsScreenState extends State<PaymentsScreen>
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  isPartial 
-                      ? 'Amount: ${fmtINR(displayAmount)} (50%)'
+                  isPartial
+                      ? 'Amount: ${fmtINR(displayAmount)}'
                       : 'Amount: ${fmtINR(displayAmount)}',
                   style: TextStyle(color: qrColor, fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ),
+            if (displayAmount > 0 && (upiLink != null || !isPartial))
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: OutlinedButton.icon(
+                  onPressed: () => _openUPIPayment(displayAmount),
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Open UPI Payment App'),
                 ),
               ),
           ],
@@ -1110,8 +1316,26 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                               return;
                             }
 
+                            final due = _getTotalDue();
                             if (amount == null || amount <= 0) {
                               SnackbarHelper.showError(context, 'Please enter a valid amount');
+                              return;
+                            }
+                            if (_currentBill?.hasPendingPaymentProof == true) {
+                              SnackbarHelper.showError(context, 'A payment proof is already awaiting admin verification. Please wait before submitting another payment.');
+                              return;
+                            }
+                            if (amount > due + 0.005) {
+                              SnackbarHelper.showError(context, 'Amount exceeds the current due of ${fmtINR(due)}.');
+                              return;
+                            }
+                            final isPartial = amount < due - 0.005;
+                            if (_currentBill?.hasVerifiedPartial == true && isPartial) {
+                              SnackbarHelper.showError(context, 'A partial payment has already been made. You must pay the full remaining balance of ${fmtINR(due)}.');
+                              return;
+                            }
+                            if (isPartial && amount < due * 0.5 - 0.005) {
+                              SnackbarHelper.showError(context, 'Partial payment must be at least 50% of the current due: ${fmtINR(due * 0.5)}. You entered ${fmtINR(amount)}.');
                               return;
                             }
 
@@ -1285,6 +1509,9 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           type: 'online',
           billTotal: p.billTotal,
           adminNotes: p.adminNotes,
+          isPartial: p.isPartial,
+          dueBeforePayment: p.dueBeforePayment,
+          dueAfterPayment: p.dueAfterPayment,
         ));
       }
       
@@ -1301,6 +1528,9 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           type: 'cash',
           billTotal: p.billTotal,
           adminNotes: p.adminNotes,
+          isPartial: p.isPartial,
+          dueBeforePayment: p.dueBeforePayment,
+          dueAfterPayment: p.dueAfterPayment,
         ));
       }
       
@@ -1317,6 +1547,9 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           type: 'proof',
           billTotal: p.billTotal,
           adminNotes: p.adminNotes,
+          isPartial: p.isPartial,
+          dueBeforePayment: p.dueBeforePayment,
+          dueAfterPayment: p.dueAfterPayment,
         ));
       }
     }
@@ -1438,6 +1671,11 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                                           payment.transactionId!,
                                           style: TextStyle(color: Colors.white.withOpacity(0.22), fontSize: 10),
                                         ),
+                                      if (payment.dueAfterPayment != null)
+                                        Text(
+                                          'Remaining balance: ${fmtINR(payment.dueAfterPayment!)}',
+                                          style: TextStyle(color: Colors.white.withOpacity(0.32), fontSize: 11),
+                                        ),
                                       // ============================================================
                                       // FIXED: Show rejection reason when status is rejected
                                       // ============================================================
@@ -1467,7 +1705,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                                     ],
                                   ),
                                 ),
-                ElevatedButton(
+                if (isPaid) ElevatedButton(
                   onPressed: _isDownloadingReceipt && _downloadingReceiptId == payment.id
                       ? null
                       : () => _handleDownloadReceipt(context, payment),

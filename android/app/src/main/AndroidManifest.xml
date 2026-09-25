@@ -80,6 +80,24 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" android:host="share.google" />
         </intent>
+
+        <!-- UPI / payment-app deep-link visibility for Android 11+ -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="phonepe" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="paytmmp" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tez" />
+        </intent>
         
         <intent>
             <action android:name="com.google.android.c2dm.intent.REGISTER" />

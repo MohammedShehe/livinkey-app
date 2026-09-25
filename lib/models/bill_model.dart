@@ -17,6 +17,13 @@ class BillModel {
   final String? paymentQr;
   final String? partialPaymentQr;
   final String? adminQr;
+  final String? paymentBankName;
+  final String? paymentAccountHolderName;
+  final String? paymentAccountNumber;
+  final String? paymentIfscCode;
+  final String? paymentUpiId;
+  final String? paymentDetailsSource;
+  final String? paymentDetailsQr;
   final String? electricityMeterImage;
   final String? electricityMeterImage2;
   final DateTime sentAt;
@@ -28,6 +35,8 @@ class BillModel {
   final String? roomNumber;
   final double dueAmount;
   final bool isOverdue;
+  final bool hasVerifiedPartial;
+  final bool hasPendingPaymentProof;
 
   BillModel({
     required this.id,
@@ -46,6 +55,13 @@ class BillModel {
     this.paymentQr,
     this.partialPaymentQr,
     this.adminQr,
+    this.paymentBankName,
+    this.paymentAccountHolderName,
+    this.paymentAccountNumber,
+    this.paymentIfscCode,
+    this.paymentUpiId,
+    this.paymentDetailsSource,
+    this.paymentDetailsQr,
     this.electricityMeterImage,
     this.electricityMeterImage2,
     required this.sentAt,
@@ -57,6 +73,8 @@ class BillModel {
     this.roomNumber,
     this.dueAmount = 0,
     this.isOverdue = false,
+    this.hasVerifiedPartial = false,
+    this.hasPendingPaymentProof = false,
   });
 
   /// True when at least one meter image is attached.
@@ -111,6 +129,13 @@ class BillModel {
       paymentQr: json['payment_qr']?.toString(),
       partialPaymentQr: json['partial_payment_qr']?.toString(),
       adminQr: json['admin_qr']?.toString(),
+      paymentBankName: json['payment_bank_name']?.toString(),
+      paymentAccountHolderName: json['payment_account_holder_name']?.toString(),
+      paymentAccountNumber: json['payment_account_number']?.toString(),
+      paymentIfscCode: json['payment_ifsc_code']?.toString(),
+      paymentUpiId: json['payment_upi_id']?.toString(),
+      paymentDetailsSource: json['payment_details_source']?.toString(),
+      paymentDetailsQr: json['payment_details_qr']?.toString(),
       electricityMeterImage: json['electricity_meter_image']?.toString(),
       electricityMeterImage2: json['electricity_meter_image_2']?.toString(),
       sentAt: DateTime.tryParse(json['sent_at']?.toString() ?? '') ?? DateTime.now(),
@@ -122,6 +147,8 @@ class BillModel {
       roomNumber: json['room_number']?.toString(),
       dueAmount: _toDouble(json['due_amount'] ?? json['total_due']),
       isOverdue: json['is_overdue'] == true || json['is_overdue'] == 1 || json['is_overdue'] == '1',
+      hasVerifiedPartial: json['has_verified_partial'] == true || json['has_verified_partial'] == 1 || json['has_verified_partial'] == '1',
+      hasPendingPaymentProof: json['has_pending_payment_proof'] == true || json['has_pending_payment_proof'] == 1 || json['has_pending_payment_proof'] == '1',
     );
   }
 }
@@ -172,6 +199,9 @@ class PaymentRecord {
   final String? type;
   final double? billTotal;
   final String? adminNotes;
+  final bool isPartial;
+  final double? dueBeforePayment;
+  final double? dueAfterPayment;
 
   PaymentRecord({
     required this.id,
@@ -184,6 +214,9 @@ class PaymentRecord {
     this.type,
     this.billTotal,
     this.adminNotes,
+    this.isPartial = false,
+    this.dueBeforePayment,
+    this.dueAfterPayment,
   });
 
   factory PaymentRecord.fromJson(Map<String, dynamic> json) {
@@ -194,7 +227,9 @@ class PaymentRecord {
           : int.tryParse('${json['bill_id']}') ?? 0,
       amount: (json['amount'] is num)
           ? (json['amount'] as num).toDouble()
-          : double.tryParse('${json['amount']}') ?? 0,
+          : (json['amount_paid'] is num)
+              ? (json['amount_paid'] as num).toDouble()
+              : double.tryParse('${json['amount'] ?? json['amount_paid'] ?? 0}') ?? 0,
       paymentMethod: json['payment_method']?.toString() ??
           json['_gateway']?.toString() ??
           'online',
@@ -208,6 +243,9 @@ class PaymentRecord {
               : double.tryParse('${json['bill_total']}'))
           : null,
       adminNotes: json['admin_notes']?.toString() ?? json['notes']?.toString(),
+      isPartial: json['is_partial'] == true || json['is_partial'] == 1 || json['is_partial'] == '1',
+      dueBeforePayment: json['due_before_payment'] != null ? ((json['due_before_payment'] is num) ? (json['due_before_payment'] as num).toDouble() : double.tryParse('${json['due_before_payment']}')) : null,
+      dueAfterPayment: json['due_after_payment'] != null ? ((json['due_after_payment'] is num) ? (json['due_after_payment'] as num).toDouble() : double.tryParse('${json['due_after_payment']}')) : null,
     );
   }
 }
