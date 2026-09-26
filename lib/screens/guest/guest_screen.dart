@@ -92,11 +92,7 @@ class GuestScreenState extends State<GuestScreen> {
 
   void navigateToTab(int index) {
     if (_selectedIndex != index) {
-      _pageController.animateToPage(
-        index,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeInOutCubic,
-      );
+      _pageController.jumpToPage(index);
     }
     HapticFeedback.lightImpact();
   }
