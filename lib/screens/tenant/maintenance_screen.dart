@@ -127,43 +127,6 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
     }
   }
 
-  Future<bool> _onWillPop() async {
-    return await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            backgroundColor: const Color(0xFF141414),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: BorderSide(color: Colors.white.withOpacity(0.06)),
-            ),
-            title: const Text('Exit App?', style: TextStyle(color: Colors.white)),
-            content: Text(
-              'Are you sure you want to exit the app?',
-              style: TextStyle(color: Colors.white.withOpacity(0.65)),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.5))),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: Ink(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [kLivinkeyGreen, Color(0xFF7CB342)]),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    child: const Text('Exit', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
 
   List<Map<String, dynamic>> get _filteredRequests {
     if (_selectedFilter == 'All') return _requests;
@@ -226,9 +189,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
       );
     }
 
-    return WillPopScope(
-      onWillPop: _onWillPop,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: kLivinkeyBlack,
         appBar: AppBar(
           backgroundColor: kLivinkeyBlack,
@@ -379,7 +340,6 @@ class _MaintenanceScreenState extends State<MaintenanceScreen>
             ),
           ),
         ),
-      ),
     );
   }
 

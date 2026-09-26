@@ -359,6 +359,13 @@ class TenantScreenState extends State<TenantScreen> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
+        // On a non-home tab: go back to Home (previous section), do not exit.
+        if (_selectedIndex != 0) {
+          setState(() => _selectedIndex = 0);
+          _pageController.jumpToPage(0);
+          return false;
+        }
+        // Already on Home — only then confirm leaving the app.
         return await showDialog(
           context: context,
           builder: (context) => AlertDialog(

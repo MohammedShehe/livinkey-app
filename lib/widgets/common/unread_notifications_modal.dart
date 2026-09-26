@@ -18,7 +18,15 @@ class UnreadNotificationsModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unread = notifications.where((n) => !n.isRead).toList();
+    // Dedupe by id so the same notification never appears twice in the popup
+    final seen = <int>{};
+    final unread = <NotificationModel>[];
+    for (final n in notifications) {
+      if (n.isRead) continue;
+      if (seen.contains(n.id)) continue;
+      seen.add(n.id);
+      unread.add(n);
+    }
 
     return Dialog(
       backgroundColor: const Color(0xFF161616),

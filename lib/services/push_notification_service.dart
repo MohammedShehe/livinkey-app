@@ -81,10 +81,12 @@ class PushNotificationService {
     );
 
     if (Platform.isIOS) {
+      // Keep badge/sound via system, but disable system alert so we don't
+      // get a duplicate with the local notification we show ourselves.
       await _fcm.setForegroundNotificationPresentationOptions(
-        alert: true,
+        alert: false,
         badge: true,
-        sound: true,
+        sound: false,
       );
     }
   }
@@ -191,10 +193,22 @@ class PushNotificationService {
     } catch (_) {}
   }
 
+  /// Stable id so the same FCM message updates instead of stacking duplicates.
+  int _notificationIdFor(RemoteMessage message) {
+    final raw = message.messageId ??
+        message.data['id']?.toString() ??
+        message.data['notification_id']?.toString() ??
+        '${message.notification?.title ?? ''}|${message.notification?.body ?? ''}|${message.sentTime?.millisecondsSinceEpoch ?? ''}';
+    return raw.hashCode & 0x7fffffff; // positive 31-bit
+  }
+
   Future<void> _showLocalNotification(RemoteMessage message) async {
-    final String title = message.notification?.title ?? 'Livinkey';
-    final String body =
-        message.notification?.body ?? 'You have a new notification';
+    final String title = message.notification?.title ??
+        message.data['title']?.toString() ??
+        'Livinkey';
+    final String body = message.notification?.body ??
+        message.data['body']?.toString() ??
+        'You have a new notification';
 
     // Encode the whole data map as payload so we can navigate correctly
     final String payload = _encodePayload(message.data);
@@ -205,7 +219,9 @@ class PushNotificationService {
       channelDescription: 'Notifications from Livinkey',
       importance: Importance.max,
       priority: Priority.high,
-      icon: '@mipmap/ic_launcher',
+      icon: '@drawable/ic_stat_notification',
+      color: Color(0xFF92C24A),
+      colorized: false,
       enableVibration: true,
       enableLights: true,
       ledColor: Color(0xFF92C24A),
@@ -228,7 +244,7 @@ class PushNotificationService {
     );
 
     await _localNotifications.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      _notificationIdFor(message),
       title,
       body,
       details,
@@ -362,23 +378,50 @@ class PushNotificationService {
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
 
+  // When the FCM payload includes a `notification` block, Android/iOS already
+  // display a system notification. Showing another local one causes duplicates.
+  // Only create a local notification for data-only messages.
+  if (message.notification != null) {
+    return;
+  }
+
   final localNotifications = FlutterLocalNotificationsPlugin();
 
+  // Must init plugin in background isolate before show()
+  const androidSettings =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+  const iosSettings = DarwinInitializationSettings();
+  await localNotifications.initialize(
+    const InitializationSettings(android: androidSettings, iOS: iosSettings),
+  );
+
   const androidDetails = AndroidNotificationDetails(
-    'livinkey_background_channel',
+    'livinkey_channel',
     'Livinkey Notifications',
-    channelDescription: 'Livinkey background notifications',
+    channelDescription: 'Notifications from Livinkey',
     importance: Importance.max,
     priority: Priority.high,
-    icon: '@mipmap/ic_launcher',
+    icon: '@drawable/ic_stat_notification',
+    color: Color(0xFF92C24A),
   );
 
   const details = NotificationDetails(android: androidDetails);
 
+  final title =
+      message.data['title']?.toString() ?? 'Livinkey';
+  final body =
+      message.data['body']?.toString() ?? 'You have a new notification';
+
+  final rawId = message.messageId ??
+      message.data['id']?.toString() ??
+      message.data['notification_id']?.toString() ??
+      '$title|$body';
+  final id = rawId.hashCode & 0x7fffffff;
+
   await localNotifications.show(
-    DateTime.now().millisecondsSinceEpoch ~/ 1000,
-    message.notification?.title ?? 'Livinkey',
-    message.notification?.body ?? 'You have a new notification',
+    id,
+    title,
+    body,
     details,
     payload: message.data.entries
         .map((e) => '${e.key}=${Uri.encodeComponent(e.value.toString())}')

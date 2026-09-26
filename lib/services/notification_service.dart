@@ -26,6 +26,19 @@ class NotificationService {
       StreamController<int>.broadcast();
   Stream<int> get unreadCountStream => _unreadCountController.stream;
 
+
+  List<NotificationModel> _dedupeById(List<NotificationModel> list) {
+    final seen = <int>{};
+    final out = <NotificationModel>[];
+    for (final n in list) {
+      if (seen.contains(n.id)) continue;
+      seen.add(n.id);
+      out.add(n);
+    }
+    return out;
+  }
+
+
   /// Initialize (or re-init when role changes). Always refreshes.
   Future<void> initialize({bool isTenant = true}) async {
     // Allow re-init when switching tenant <-> guest
@@ -77,8 +90,8 @@ class NotificationService {
           notificationsRes['data'] != null) {
         final data = notificationsRes['data'];
         if (data is List) {
-          _notifications =
-              data.map((n) => NotificationModel.fromJson(n)).toList();
+          _notifications = _dedupeById(
+              data.map((n) => NotificationModel.fromJson(n)).toList());
           final listUnread = _notifications.where((n) => !n.isRead).length;
           if (listUnread > _unreadCount) {
             _unreadCount = listUnread;
@@ -110,8 +123,8 @@ class NotificationService {
           notificationsRes['data'] != null) {
         final data = notificationsRes['data'];
         if (data is List) {
-          _notifications =
-              data.map((n) => NotificationModel.fromJson(n)).toList();
+          _notifications = _dedupeById(
+              data.map((n) => NotificationModel.fromJson(n)).toList());
           final listUnread = _notifications.where((n) => !n.isRead).length;
           if (listUnread > _unreadCount) {
             _unreadCount = listUnread;
@@ -138,8 +151,8 @@ class NotificationService {
       if (response['success'] == true && response['data'] != null) {
         final data = response['data'];
         if (data is List && data.isNotEmpty) {
-          final list =
-              data.map((n) => NotificationModel.fromJson(n)).toList();
+          final list = _dedupeById(
+              data.map((n) => NotificationModel.fromJson(n)).toList());
           // Ensure they are treated as unread for the modal
           return list.map((n) => n.copyWith(isRead: false)).toList();
         }
