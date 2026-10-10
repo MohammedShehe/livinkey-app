@@ -16,6 +16,7 @@ import '../common/notification_screen.dart';
 import '../auth/login_screen.dart';
 import '../guest/guest_screen.dart';
 import '../../widgets/common/snackbar_helper.dart';
+import '../../widgets/common/unread_notifications_modal.dart';
 
 class TenantScreen extends StatefulWidget {
   const TenantScreen({super.key});
@@ -24,7 +25,7 @@ class TenantScreen extends StatefulWidget {
   TenantScreenState createState() => TenantScreenState();
 }
 
-class TenantScreenState extends State<TenantScreen> {
+class TenantScreenState extends State<TenantScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   late final PageController _pageController;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -43,6 +44,7 @@ class TenantScreenState extends State<TenantScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pageController = PageController(initialPage: 0);
     _notificationService.initialize(isTenant: true);
     _updateUnreadCount();
@@ -51,6 +53,7 @@ class TenantScreenState extends State<TenantScreen> {
     // FIXED: Ensure push notifications are initialized when tenant screen loads
     // ============================================================
     _initializePushNotifications();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _runTenantModalQueue());
 
     _notificationService.notificationsStream.listen((_) {
       if (mounted) {
@@ -72,8 +75,181 @@ class TenantScreenState extends State<TenantScreen> {
     }
   }
 
+  bool _isShowingTenantModal = false;
+
+  /// Tenant modal priority queue:
+  /// 1. Mandatory agreement acceptance
+  /// 2. Unread notifications
+  ///
+  /// These dialogs are always awaited sequentially, so Flutter can never
+  /// attempt to display both dialogs on top of each other.
+  Future<void> _runTenantModalQueue() async {
+    if (!mounted || _isShowingTenantModal) return;
+    _isShowingTenantModal = true;
+    try {
+      await _enforceTenantAgreement();
+      if (!mounted) return;
+      await _showUnreadNotificationsIfNeeded();
+    } finally {
+      _isShowingTenantModal = false;
+    }
+  }
+
+  Future<void> _enforceTenantAgreement() async {
+    if (!mounted) return;
+    final res = await _api.getTenantAgreement();
+    if (!mounted || res['success'] != true) return;
+    final data = res['data'] is Map
+        ? Map<String, dynamic>.from(res['data'])
+        : null;
+    if (data == null || data['enabled'] != true || data['accepted'] == true) {
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      useRootNavigator: true,
+      builder: (_) => WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFF161616),
+          title: const Row(
+            children: [
+              Icon(Icons.description_rounded, color: kLivinkeyGreen),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Tenant Agreement',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Text(
+              data['text']?.toString() ?? '',
+              style: const TextStyle(color: Colors.white70, height: 1.6),
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kLivinkeyGreen,
+                foregroundColor: Colors.black,
+              ),
+              onPressed: () async {
+                final accepted = await _api.acceptTenantAgreement();
+                if (!mounted) return;
+                if (accepted['success'] == true) {
+                  Navigator.of(context, rootNavigator: true).pop();
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        accepted['message']?.toString() ??
+                            'Unable to accept agreement.',
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: const Text(
+                'I Accept',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showUnreadNotificationsIfNeeded() async {
+    if (!mounted) return;
+
+    await NotificationService().refresh(isTenant: true);
+    var unread =
+      await NotificationService().fetchUnreadNotifications(isTenant: true);
+
+    if (unread.isEmpty && NotificationService().unreadCount > 0) {
+      await NotificationService().refresh(isTenant: true);
+      unread = await NotificationService()
+          .fetchUnreadNotifications(isTenant: true);
+    }
+
+    if (!mounted || unread.isEmpty) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      useRootNavigator: true,
+      builder: (_) => UnreadNotificationsModal(
+        notifications: unread,
+        isTenant: true,
+        onMarkAllRead: () async {
+          await NotificationService().markAllAsRead(isTenant: true);
+          if (mounted) _updateUnreadCount();
+        },
+        onTapNotification: (notification) async {
+          await NotificationService().markAsRead(
+            notification.id,
+            isTenant: true,
+          );
+          if (mounted) {
+            _updateUnreadCount();
+            _navigateFromNotification(notification);
+          }
+        },
+      ),
+    );
+  }
+
+  void _navigateFromNotification(dynamic notification) {
+    final type = (notification.type ?? '').toLowerCase();
+    switch (type) {
+      case 'bill_created':
+      case 'bill_paid':
+      case 'bill_partially_paid':
+      case 'bill_fine_applied':
+      case 'payment_reminder':
+      case 'payment':
+        navigateToTab(1);
+        break;
+      case 'maintenance_created':
+      case 'maintenance_started':
+      case 'maintenance_completed':
+      case 'maintenance_reminder':
+      case 'maintenance':
+        navigateToTab(2);
+        break;
+      case 'document_reminder':
+      case 'efrro_expiry':
+      case 'document':
+        navigateToTab(3);
+        break;
+      default:
+        navigateToTab(0);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      // Re-run the same serialized queue when returning to the app.
+      // Agreement always has priority over unread notifications.
+      Future<void>.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _runTenantModalQueue();
+      });
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     super.dispose();
   }

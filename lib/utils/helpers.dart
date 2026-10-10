@@ -4,10 +4,11 @@ import 'constants.dart';
 
 String getTimeOfDay() {
   final hour = DateTime.now().hour;
-  if (hour < 12) return 'Morning';
-  if (hour < 17) return 'Afternoon';
-  if (hour < 21) return 'Evening';
-  return 'Night';
+  // Always use local device time so the greeting matches the user's timezone
+  if (hour >= 5 && hour < 12) return 'Good Morning';
+  if (hour >= 12 && hour < 17) return 'Good Afternoon';
+  if (hour >= 17 && hour < 21) return 'Good Evening';
+  return 'Good Night';
 }
 
 String formatDate(DateTime date) {

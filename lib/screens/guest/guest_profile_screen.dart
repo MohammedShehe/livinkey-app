@@ -79,80 +79,98 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
   }
 
   // ============================================================
-  // Load profile - works for BOTH guests AND tenants
+  // Load profile - works for BOTH pure guests AND tenants viewing as guest
+  // Tenants keep their tenant token; never call /guests/profile with it
+  // (backend returns 401 and the global interceptor would clear the token).
   // ============================================================
   Future<void> _loadProfile() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
-    
+
     try {
-      final response = await _api.getGuestProfile();
-      
-      if (response['success'] == true && response['data'] != null) {
-        final data = response['data'];
-        setState(() {
-          _profileData = data;
-          _isTenantViewingAsGuest = data['is_tenant_viewing_as_guest'] ?? false;
-          
-          // ============================================================
-          // FIXED: Only keep profile picture if tenant is viewing as guest
-          // Real guests should NOT have a profile picture
-          // ============================================================
-          if (!_isTenantViewingAsGuest) {
-            // Real guests should NOT have a profile picture
-            _profileData.remove('profile_picture');
-            _profileData.remove('document_url');
+      final role = await _api.getStoredRole();
+      final isTenant = role == 'tenant';
+
+      if (isTenant) {
+        // Tenant viewing as guest → use tenant profile endpoint (valid token)
+        final response = await _api.getTenantProfile();
+        if (response['success'] == true && response['data'] != null) {
+          final data = Map<String, dynamic>.from(response['data'] as Map);
+          // Normalize so guest profile UI keys work
+          data['is_tenant_viewing_as_guest'] = true;
+          if (data['full_name'] == null && data['name'] != null) {
+            data['full_name'] = data['name'];
           }
-          _isLoading = false;
-        });
-      } else {
-        // Try to get from local storage as fallback
-        final user = await _api.getUser();
-        if (user != null) {
+          if (mounted) {
+            setState(() {
+              _profileData = data;
+              _isTenantViewingAsGuest = true;
+              _isLoading = false;
+            });
+          }
+          return;
+        }
+        // Fallback to locally stored user
+        await _loadFromLocalUser(isTenantViewingAsGuest: true);
+        return;
+      }
+
+      // Pure guest → use guest profile endpoint
+      final response = await _api.getGuestProfile();
+
+      if (response['success'] == true && response['data'] != null) {
+        final data = Map<String, dynamic>.from(response['data'] as Map);
+        if (mounted) {
           setState(() {
-            _profileData = {
-              'full_name': user.fullName,
-              'email': user.email,
-              'nationality': user.nationality,
-              'phone': user.phone,
-              'country_code': user.countryCode,
-              'is_active': user.isActive,
-              'role': user.role,
-            };
-            _isTenantViewingAsGuest = user.role == 'tenant';
+            _profileData = data;
+            _isTenantViewingAsGuest =
+                data['is_tenant_viewing_as_guest'] == true;
+            // Real guests should NOT have a profile picture
+            if (!_isTenantViewingAsGuest) {
+              _profileData.remove('profile_picture');
+              _profileData.remove('document_url');
+            }
             _isLoading = false;
           });
-        } else {
-          SnackbarHelper.showError(
-            context, 
-            response['message'] ?? 'Failed to load profile'
-          );
-          setState(() => _isLoading = false);
         }
+      } else {
+        await _loadFromLocalUser(
+          isTenantViewingAsGuest: false,
+          errorMessage: response['message'],
+        );
       }
     } catch (e) {
-      // Try to get from local storage as fallback
-      final user = await _api.getUser();
-      if (user != null) {
-        setState(() {
-          _profileData = {
-            'full_name': user.fullName,
-            'email': user.email,
-            'nationality': user.nationality,
-            'phone': user.phone,
-            'country_code': user.countryCode,
-            'is_active': user.isActive,
-            'role': user.role,
-          };
-          _isTenantViewingAsGuest = user.role == 'tenant';
-          _isLoading = false;
-        });
-      } else {
-        if (mounted) {
-          SnackbarHelper.showError(context, 'Failed to load profile');
-          setState(() => _isLoading = false);
-        }
-      }
+      await _loadFromLocalUser(isTenantViewingAsGuest: false);
+    }
+  }
+
+  Future<void> _loadFromLocalUser({
+    required bool isTenantViewingAsGuest,
+    String? errorMessage,
+  }) async {
+    final user = await _api.getUser();
+    if (user != null && mounted) {
+      setState(() {
+        _profileData = {
+          'full_name': user.fullName,
+          'email': user.email,
+          'nationality': user.nationality,
+          'phone': user.phone,
+          'country_code': user.countryCode,
+          'is_active': user.isActive,
+          'role': user.role,
+          'is_tenant_viewing_as_guest': isTenantViewingAsGuest || user.role == 'tenant',
+        };
+        _isTenantViewingAsGuest =
+            isTenantViewingAsGuest || user.role == 'tenant';
+        _isLoading = false;
+      });
+    } else if (mounted) {
+      SnackbarHelper.showError(
+        context,
+        errorMessage ?? 'Failed to load profile',
+      );
+      setState(() => _isLoading = false);
     }
   }
 

@@ -37,6 +37,8 @@ class BillModel {
   final bool isOverdue;
   final bool hasVerifiedPartial;
   final bool hasPendingPaymentProof;
+  final double totalOutstanding;
+  final List<OutstandingBill> outstandingBills;
 
   BillModel({
     required this.id,
@@ -75,6 +77,8 @@ class BillModel {
     this.isOverdue = false,
     this.hasVerifiedPartial = false,
     this.hasPendingPaymentProof = false,
+    this.totalOutstanding = 0,
+    this.outstandingBills = const [],
   });
 
   /// True when at least one meter image is attached.
@@ -93,6 +97,9 @@ class BillModel {
     }
     return list;
   }
+
+  double get previousOutstanding =>
+      (totalOutstanding - dueAmount).clamp(0, double.infinity);
 
   static double _toDouble(dynamic v) {
     if (v == null) return 0;
@@ -149,6 +156,49 @@ class BillModel {
       isOverdue: json['is_overdue'] == true || json['is_overdue'] == 1 || json['is_overdue'] == '1',
       hasVerifiedPartial: json['has_verified_partial'] == true || json['has_verified_partial'] == 1 || json['has_verified_partial'] == '1',
       hasPendingPaymentProof: json['has_pending_payment_proof'] == true || json['has_pending_payment_proof'] == 1 || json['has_pending_payment_proof'] == '1',
+      totalOutstanding: _toDouble(json['total_outstanding'] ?? json['total_outstanding_amount']),
+      outstandingBills: (json['outstanding_bills'] is List)
+          ? (json['outstanding_bills'] as List)
+              .whereType<Map>()
+              .map((item) => OutstandingBill.fromJson(Map<String, dynamic>.from(item)))
+              .toList()
+          : const [],
+    );
+  }
+}
+
+
+class OutstandingBill {
+  final int id;
+  final String? billingMonth;
+  final double totalAmount;
+  final double fineAmount;
+  final double paidAmount;
+  final double dueAmount;
+  final String status;
+  final String? roomNumber;
+
+  const OutstandingBill({
+    required this.id,
+    this.billingMonth,
+    required this.totalAmount,
+    required this.fineAmount,
+    required this.paidAmount,
+    required this.dueAmount,
+    required this.status,
+    this.roomNumber,
+  });
+
+  factory OutstandingBill.fromJson(Map<String, dynamic> json) {
+    return OutstandingBill(
+      id: json['id'] is int ? json['id'] as int : int.tryParse('${json['id']}') ?? 0,
+      billingMonth: json['billing_month']?.toString(),
+      totalAmount: BillModel._toDouble(json['total_amount']),
+      fineAmount: BillModel._toDouble(json['fine_amount']),
+      paidAmount: BillModel._toDouble(json['paid_amount']),
+      dueAmount: BillModel._toDouble(json['due_amount']),
+      status: json['status']?.toString() ?? 'unpaid',
+      roomNumber: json['room_number']?.toString(),
     );
   }
 }

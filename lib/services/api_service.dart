@@ -61,7 +61,17 @@ class ApiService {
       },
       onError: (error, handler) async {
         if (error.response?.statusCode == 401 || error.response?.statusCode == 403) {
-          await _handleUnauthorized();
+          // Do NOT clear token when a tenant is browsing guest endpoints.
+          // They still hold a valid tenant token; guest routes may reject it
+          // with 401, but that must not log the tenant out.
+          final path = error.requestOptions.path;
+          final isGuestPath = path.contains('/guests/');
+          final role = _role ?? (await SharedPreferences.getInstance()).getString(kStorageRole);
+          if (isGuestPath && role == 'tenant') {
+            // Ignore — keep tenant session intact
+          } else {
+            await _handleUnauthorized();
+          }
         }
         return handler.next(error);
       },
@@ -418,6 +428,54 @@ class ApiService {
 
   // ============ TENANT ENDPOINTS ============
 
+  Future<Map<String, dynamic>> getLivinkeyAds() async {
+    try {
+      final response = await _dio.get('/livinkey-ads/tenant');
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) return e.response!.data;
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (_) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> getLivinkeyNotices() async {
+    try {
+      final response = await _dio.get('/livinkey-notices/tenant');
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) return e.response!.data;
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (_) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> getTenantAgreement() async {
+    try {
+      final response = await _dio.get('/tenants/agreement');
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) return e.response!.data;
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (_) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> acceptTenantAgreement() async {
+    try {
+      final response = await _dio.post('/tenants/agreement/accept');
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) return e.response!.data;
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (_) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
   Future<Map<String, dynamic>> getTenantProfile() async {
     try {
       final response = await _dio.get('/tenants/profile');
@@ -568,19 +626,33 @@ class ApiService {
   }
 
   // ============ TENANT PAYMENTS ============
-  Future<Map<String, dynamic>> generatePartialPaymentQR({
-    required int billId,
+  Future<Map<String, dynamic>> generatePaymentQR({
+    String scope = 'bill',
+    int? billId,
     required double amount,
   }) async {
     try {
-      final response = await _dio.post('/tenant-payments/partial-qr', data: {
-        'bill_id': billId,
+      final payload = <String, dynamic>{
+        'scope': scope,
         'amount': amount,
-      });
+      };
+      if (billId != null) payload['bill_id'] = billId;
+      final response = await _dio.post('/tenant-payments/payment-qr', data: payload);
       return Map<String, dynamic>.from(response.data);
+    } on DioException catch (e) {
+      if (e.response?.data != null) return Map<String, dynamic>.from(e.response!.data);
+      return {'success': false, 'message': 'Unable to generate payment QR'};
     } catch (e) {
       return {'success': false, 'message': e.toString()};
     }
+  }
+
+  // Backward-compatible wrapper.
+  Future<Map<String, dynamic>> generatePartialPaymentQR({
+    required int billId,
+    required double amount,
+  }) {
+    return generatePaymentQR(scope: 'bill', billId: billId, amount: amount);
   }
 
 
@@ -617,10 +689,15 @@ class ApiService {
     required String transactionId,
     required double amountPaid,
     required String paymentScreenshot,
+    String paymentScope = 'bill',
+    int? paymentTargetBillId,
   }) async {
     try {
-      if (billId <= 0) {
+      if (paymentScope == 'bill' && billId <= 0) {
         return {'success': false, 'message': 'Invalid bill ID'};
+      }
+      if (paymentScope == 'outstanding' && billId < 0) {
+        return {'success': false, 'message': 'Invalid payment scope'};
       }
       if (transactionId.isEmpty) {
         return {'success': false, 'message': 'Transaction ID is required'};
@@ -633,7 +710,13 @@ class ApiService {
       }
 
       final formData = FormData();
-      formData.fields.add(MapEntry('bill_id', billId.toString()));
+      if (billId > 0) {
+        formData.fields.add(MapEntry('bill_id', billId.toString()));
+      }
+      formData.fields.add(MapEntry('payment_scope', paymentScope));
+      if (paymentTargetBillId != null) {
+        formData.fields.add(MapEntry('payment_target_bill_id', paymentTargetBillId.toString()));
+      }
       formData.fields.add(MapEntry('transaction_id', transactionId));
       formData.fields.add(MapEntry('amount_paid', amountPaid.toString()));
 

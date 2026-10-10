@@ -80,6 +80,8 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
         final data = response['data'] as List;
         _allPgs = data.map((pg) => PgModel.fromJson(pg)).toList();
         _searchResults = _allPgs;
+        // Enrich with floors so vacant = completely empty rooms only
+        await _enrichPgsWithEmptyRooms();
       } else {
         SnackbarHelper.showError(
           context,
@@ -95,6 +97,58 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  /// Enrich PGs that lack floors data by fetching details so emptyRoomsCount works.
+  Future<void> _enrichPgsWithEmptyRooms() async {
+    if (_allPgs.isEmpty) return;
+    final futures = _allPgs.asMap().entries.map((entry) async {
+      final index = entry.key;
+      final pg = entry.value;
+      if (pg.floors.isNotEmpty) return;
+      try {
+        final response = await _api.getPublicPGDetails(pg.id);
+        if (response['success'] == true && response['data'] != null) {
+          final detail = PgModel.fromJson(response['data']);
+          if (detail.floors.isNotEmpty && mounted) {
+            _allPgs[index] = PgModel(
+              id: pg.id,
+              name: pg.name,
+              location: pg.location,
+              rating: pg.rating,
+              totalRooms: pg.totalRooms > 0 ? pg.totalRooms : detail.totalRooms,
+              totalCapacity: pg.totalCapacity > 0 ? pg.totalCapacity : detail.totalCapacity,
+              totalOccupied: pg.totalOccupied > 0 ? pg.totalOccupied : detail.totalOccupied,
+              rent: pg.rent,
+              securityFee: pg.securityFee,
+              numberOfFloors: pg.numberOfFloors,
+              isActive: pg.isActive,
+              coverImage: pg.coverImage ?? detail.coverImage,
+              images: pg.images.isNotEmpty ? pg.images : detail.images,
+              amenityNames: pg.amenityNames.isNotEmpty ? pg.amenityNames : detail.amenityNames,
+              statusText: pg.statusText,
+              occupancyPercentage: pg.occupancyPercentage,
+              floors: detail.floors,
+              reviews: pg.reviews.isNotEmpty ? pg.reviews : detail.reviews,
+            );
+          }
+        }
+      } catch (_) {}
+    });
+    await Future.wait(futures);
+    if (mounted) {
+      setState(() {
+        _searchResults = _searchQuery.isEmpty
+            ? List.from(_allPgs)
+            : _allPgs.where((pg) {
+                final q = _searchQuery.toLowerCase();
+                return pg.name.toLowerCase().contains(q) ||
+                    pg.location.toLowerCase().contains(q) ||
+                    pg.amenityNames.any((a) => a.toLowerCase().contains(q)) ||
+                    pg.rent.toString().contains(q);
+              }).toList();
+      });
     }
   }
 

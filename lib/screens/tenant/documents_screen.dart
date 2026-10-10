@@ -164,6 +164,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     if (residency == 'international') {
       return [
         {'label': 'Passport Size Photo', 'key': 'passport_photo', 'required': true},
+        {'label': 'Signature', 'key': 'signature', 'required': true},
         {'label': 'Passport', 'key': 'passport', 'required': true},
         {'label': 'Visa', 'key': 'visa', 'required': true},
         {'label': 'Arrival Stamp', 'key': 'arrival_stamp', 'required': true},
@@ -174,6 +175,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     } else {
       return [
         {'label': 'Passport Size Photo', 'key': 'passport_photo', 'required': true},
+        {'label': 'Signature', 'key': 'signature', 'required': true},
         {'label': 'Tenant Aadhaar Card', 'key': 'tenant_aadhaar', 'required': true},
         {'label': 'Parent Aadhaar Card', 'key': 'parent_aadhaar', 'required': true},
         {'label': 'University ID', 'key': 'university_id', 'required': false},
@@ -1057,6 +1059,8 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     switch (type) {
       case 'passport_photo':
         return '📸';
+      case 'signature':
+        return '✍️';
       case 'passport':
         return '📖';
       case 'visa':

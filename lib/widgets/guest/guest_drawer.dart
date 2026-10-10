@@ -38,44 +38,50 @@ class GuestDrawer extends StatelessWidget {
             Expanded(
               child: Column(
                 children: [
-                  _buildDrawerItem(
-                    icon: Icons.home_rounded,
-                    title: 'Home',
-                    onTap: () => Navigator.pop(context),
+                  Expanded(
+                    child: ListView(
+                      padding: EdgeInsets.zero,
+                      children: [
+                        _buildDrawerItem(
+                          icon: Icons.home_rounded,
+                          title: 'Home',
+                          onTap: () => Navigator.pop(context),
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.search_rounded,
+                          title: 'Search PGs',
+                          onTap: () => Navigator.pop(context),
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.person_rounded,
+                          title: 'Profile',
+                          onTap: () => Navigator.pop(context),
+                        ),
+                        const Divider(color: Colors.white24, height: 24),
+                        _buildDrawerItem(
+                          icon: Icons.description_rounded,
+                          title: 'Terms of Service',
+                          onTap: () => _launchUrl(context, kTermsUrl),
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.privacy_tip_rounded,
+                          title: 'Privacy Policy',
+                          onTap: () => _launchUrl(context, kPrivacyUrl),
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.contact_support_rounded,
+                          title: 'Contact Us',
+                          onTap: () => _showContactOptions(context),
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.logout_rounded,
+                          title: 'Logout',
+                          color: Colors.red,
+                          onTap: () => _handleLogout(context),
+                        ),
+                      ],
+                    ),
                   ),
-                  _buildDrawerItem(
-                    icon: Icons.search_rounded,
-                    title: 'Search PGs',
-                    onTap: () => Navigator.pop(context),
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.person_rounded,
-                    title: 'Profile',
-                    onTap: () => Navigator.pop(context),
-                  ),
-                  const Divider(color: Colors.white24, height: 24),
-                  _buildDrawerItem(
-                    icon: Icons.description_rounded,
-                    title: 'Terms of Service',
-                    onTap: () => _launchUrl(context, kTermsUrl),
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.privacy_tip_rounded,
-                    title: 'Privacy Policy',
-                    onTap: () => _launchUrl(context, kPrivacyUrl),
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.contact_support_rounded,
-                    title: 'Contact Us',
-                    onTap: () => _showContactOptions(context),
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.logout_rounded,
-                    title: 'Logout',
-                    color: Colors.red,
-                    onTap: () => _handleLogout(context),
-                  ),
-                  const Spacer(),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(

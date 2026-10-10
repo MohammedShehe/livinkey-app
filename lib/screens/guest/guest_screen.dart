@@ -344,7 +344,70 @@ class GuestScreenState extends State<GuestScreen> {
           _pageController.jumpToPage(0);
           return false;
         }
-        // Already on Home — only then confirm leaving the app.
+        // Tenant viewing as guest → return to tenant dashboard with message
+        if (_isTenantViewingAsGuest) {
+          final shouldReturn = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF161616),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: Colors.white.withOpacity(0.08), width: 1),
+              ),
+              title: const Text(
+                'Return to Tenant Dashboard?',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              content: Text(
+                'You are browsing as a guest. Do you want to go back to your tenant dashboard?',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.6),
+                  fontSize: 14,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(
+                    'Stay',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [kLivinkeyGreen, Color(0xFF7CB342)],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Return',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+          if (shouldReturn == true) {
+            _returnToTenant();
+          }
+          return false; // We handled navigation ourselves
+        }
+        // Pure guest — confirm exiting the app
         return await showDialog(
           context: context,
           builder: (context) => AlertDialog(

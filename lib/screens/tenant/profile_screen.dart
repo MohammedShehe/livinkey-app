@@ -48,6 +48,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   String _paidTill = '';
   String? _profilePicture;
   String _residency = '';
+  int _periodOfStay = 0;
 
   @override
   void initState() {
@@ -171,6 +172,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         _nationality = _parseString(data['nationality']);
         _gender = _parseString(data['gender']);
         _residency = _parseString(data['residency']);
+        _periodOfStay = _parseInt(data['period_of_stay']);
         _profilePicture = data['profile_picture'];
 
         _rent = _parseDouble(data['rent']);
@@ -343,6 +345,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           children: [
                             ProfileRow(label: 'Name', value: _tenantName),
                             ProfileRow(label: 'Email', value: _tenantEmail),
+                            ProfileRow(label: 'Parent Phone', value: _parseString(_profileData['parent_phone']).isNotEmpty ? _parseString(_profileData['parent_phone']) : 'Not provided'),
                             ProfileRow(label: 'PG', value: _pgName),
                             ProfileRow(label: 'Room No', value: _roomNumber),
                             ProfileRow(
@@ -354,6 +357,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               value: '₹${_securityFee.toStringAsFixed(2)}'
                             ),
                             ProfileRow(label: 'Nationality', value: _nationality),
+                            ProfileRow(label: 'Period of Stay', value: _periodOfStay > 0 ? '${_periodOfStay} Month${_periodOfStay == 1 ? '' : 's'}' : 'Not set'),
                             ProfileRow(label: 'Gender', value: _gender.isNotEmpty ? _gender : 'Not specified'),
                             ProfileRow(
                               label: 'Payment Date',

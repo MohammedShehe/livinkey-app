@@ -104,6 +104,22 @@ class PgModel {
     this.reviews = const [],
   });
 
+  /// Count of completely empty rooms (occupiedCount == 0).
+  /// A room with even 1 tenant is NOT counted as available space.
+  /// Returns null if floors data is not available.
+  int? get emptyRoomsCount {
+    if (floors.isEmpty) return null;
+    int count = 0;
+    for (final floor in floors) {
+      for (final room in floor.rooms) {
+        if (room.occupiedCount == 0) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
   factory PgModel.fromJson(Map<String, dynamic> json) {
     // ============================================================
     // FIXED: Parse images using the helper

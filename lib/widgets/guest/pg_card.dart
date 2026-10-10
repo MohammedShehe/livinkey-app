@@ -18,7 +18,9 @@ class PgCard extends StatelessWidget {
     // FIXED: Use statusText instead of status
     final String statusText = pg.statusText;
     final bool isVacant = statusText == 'Vacant';
-    final int availableRooms = pg.totalCapacity - pg.totalOccupied;
+    // Count only COMPLETELY empty rooms (not remaining bed spaces)
+    // If floors data is missing, fall back to 0 so we never show partial spaces as available
+    final int availableRooms = pg.emptyRoomsCount ?? 0;
 
     return GestureDetector(
       onTap: onTap,
@@ -195,7 +197,7 @@ class PgCard extends StatelessWidget {
                         size: 12,
                       ),
                       const SizedBox(width: 2),
-                      // FIXED: Use availableRooms calculated from totalCapacity - totalOccupied
+                      // Only completely empty rooms are counted as vacant
                       Text(
                         '$availableRooms vacant',
                         style: TextStyle(

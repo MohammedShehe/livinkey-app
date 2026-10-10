@@ -92,14 +92,15 @@ class _AuthGuardState extends State<AuthGuard> with WidgetsBindingObserver {
   bool _isShowingUnreadModal = false;
 
   Future<void> _onAppResumed() async {
-    if (_initialRoute == 'tenant' || _initialRoute == 'guest') {
-      final isTenant = _initialRoute == 'tenant';
-      await PushNotificationService().onAppResumed(isTenant: isTenant);
-      await NotificationService().refresh(isTenant: isTenant);
-
-      // Show unread modal if there are unread notifications
-      await _showUnreadModalIfNeeded(isTenant: isTenant);
+    if (_initialRoute == 'guest') {
+      await PushNotificationService().onAppResumed(isTenant: false);
+      await NotificationService().refresh(isTenant: false);
+      await _showUnreadModalIfNeeded(isTenant: false);
     }
+    // TenantScreen owns the tenant modal queue (agreement first, notifications second).
+    // Do not show a tenant notification modal here, otherwise it can race the
+    // mandatory agreement dialog.
+
   }
 
   Future<void> _showUnreadModalIfNeeded({required bool isTenant}) async {
@@ -221,16 +222,18 @@ class _AuthGuardState extends State<AuthGuard> with WidgetsBindingObserver {
       setState(() => _isLoading = false);
 
       // After first paint, if user is logged in, refresh + show modal
-      if (_initialRoute == 'tenant' || _initialRoute == 'guest') {
+      if (_initialRoute == 'guest') {
         WidgetsBinding.instance.addPostFrameCallback((_) async {
-          await NotificationService().initialize(isTenant: _isTenant);
+          await NotificationService().initialize(isTenant: false);
           await PushNotificationService().initialize();
           await PushNotificationService().retryPendingToken();
-          // Force a fresh unread fetch then show modal
-          await NotificationService().refresh(isTenant: _isTenant);
-          await _showUnreadModalIfNeeded(isTenant: _isTenant);
+          await NotificationService().refresh(isTenant: false);
+          await _showUnreadModalIfNeeded(isTenant: false);
         });
       }
+      // TenantScreen performs its own serialized startup sequence so that the
+      // mandatory agreement can never overlap the unread-notifications modal.
+
     }
   }
 

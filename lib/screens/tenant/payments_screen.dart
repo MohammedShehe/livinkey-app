@@ -52,6 +52,11 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   String? _partialUpiLink;
   double? _partialAmount;
   bool _isGeneratingPartialQr = false;
+  String _paymentScope = 'bill';
+  String? _scopedQrUrl;
+  String? _scopedUpiLink;
+  double? _scopedQrAmount;
+  bool _isGeneratingScopedQr = false;
 
   bool _isDownloadingReceipt = false;
   int? _downloadingReceiptId;
@@ -95,6 +100,17 @@ class _PaymentsScreenState extends State<PaymentsScreen>
       if (billResponse['success'] == true && billResponse['data'] != null) {
         final billData = billResponse['data']['bill'];
         _currentBill = billData != null ? BillModel.fromJson(billData) : null;
+          _scopedQrUrl = null;
+          _scopedUpiLink = null;
+          _scopedQrAmount = null;
+          if (_currentBill == null) {
+            _paymentScope = 'bill';
+          } else {
+            final currentDue = _currentBill!.totalAmount + _currentBill!.fineAmount - _currentBill!.paidAmount;
+            _paymentScope = (_currentBill!.totalOutstanding > 0.005 && currentDue <= 0.005)
+                ? 'outstanding'
+                : 'bill';
+          }
       } else if ((billResponse['message']?.toString().toLowerCase() ?? '') == 'no bill found') {
         // The backend returns 404 when there is no active bill. Clear any
         // previously loaded bill so a soft-deleted bill cannot remain on
@@ -140,6 +156,25 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     if (_currentBill == null) return 0;
     final total = _currentBill!.totalAmount + _currentBill!.fineAmount - _currentBill!.paidAmount;
     return total > 0 ? total : 0;
+  }
+
+  double _getScopeDue() {
+    if (_paymentScope == 'outstanding') return _currentBill?.totalOutstanding ?? 0;
+    return _getTotalDue();
+  }
+
+  void _setPaymentScope(String scope) {
+    if (scope == _paymentScope) return;
+    setState(() {
+      _paymentScope = scope;
+      _scopedQrUrl = null;
+      _scopedUpiLink = null;
+      _scopedQrAmount = null;
+      _partialQrUrl = null;
+      _partialUpiLink = null;
+      _partialAmount = _getScopeDue();
+      _partialAmountController.text = _partialAmount?.toStringAsFixed(2) ?? '';
+    });
   }
 
   String _getFormattedDate(DateTime? date) {
@@ -297,6 +332,12 @@ class _PaymentsScreenState extends State<PaymentsScreen>
 
                     const SizedBox(height: 20),
                     
+                    _buildPaymentScopeSelector(),
+                    if ((_currentBill?.outstandingBills.length ?? 0) > 1) ...[
+                      const SizedBox(height: 14),
+                      _buildOutstandingBillsList(),
+                    ],
+                    const SizedBox(height: 16),
                     _buildPaymentDetailsCard(),
                     const SizedBox(height: 16),
                     _buildQRSection(),
@@ -340,81 +381,112 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   }
 
   Widget _buildPaymentStats() {
-    final totalDue = _getTotalDue();
-    final isPaid = _currentBill?.status == 'paid';
-    final isPartiallyPaid = _currentBill?.status == 'partially_paid';
+    final currentDue = _getTotalDue();
+    final totalOutstanding = _currentBill?.totalOutstanding ?? currentDue;
+    final previousDue = (totalOutstanding - currentDue).clamp(0, double.infinity).toDouble();
     final hasBill = _currentBill != null;
+    final status = _currentBill?.status ?? 'No bill';
+    final statusLabel = status == 'partially_paid' ? 'Partially paid' :
+        status == 'paid' ? 'Paid' :
+        status == 'pending' ? 'Pending' :
+        status == 'overdue' ? 'Overdue' : status;
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [kLivinkeyGreen.withOpacity(0.1), Colors.white.withOpacity(0.02)],
+          colors: [kLivinkeyGreen.withOpacity(0.12), Colors.white.withOpacity(0.025)],
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: kLivinkeyGreen.withOpacity(0.14)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 20, offset: const Offset(0, 8))],
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: kLivinkeyGreen.withOpacity(0.16)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            totalOutstanding > 0.005 ? 'Amount you need to pay' : 'Your payment status',
+            style: TextStyle(color: Colors.white.withOpacity(0.62), fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            fmtINR(totalOutstanding),
+            style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            totalOutstanding > 0.005
+                ? (previousDue > 0.005
+                    ? '${_currentBill!.outstandingBills.length} unpaid bills • ${fmtINR(previousDue)} from earlier bills'
+                    : '1 current bill outstanding')
+                : 'There is nothing currently due.',
+            style: TextStyle(color: Colors.white.withOpacity(0.48), fontSize: 12.5),
+          ),
+          const SizedBox(height: 16),
           Row(
             children: [
-              _buildStatItem('Total Due', totalDue > 0 ? fmtINR(totalDue) : '₹0', totalDue > 0 ? Colors.red : kLivinkeyGreen),
-              _buildStatItem('Status', _currentBill?.status ?? 'No Bill', 
-                isPaid ? kLivinkeyGreen : (isPartiallyPaid ? Colors.orange : Colors.red)),
+              _buildMiniInfo('Current bill', fmtINR(currentDue), currentDue > 0.005 ? Colors.orange : kLivinkeyGreen),
+              _buildMiniInfo('Status', hasBill ? statusLabel : 'No bill',
+                  status == 'paid' ? kLivinkeyGreen : (status == 'partially_paid' ? Colors.orange : Colors.white)),
             ],
           ),
-          Divider(color: Colors.white.withOpacity(0.06), height: 24),
-          Row(
-            children: [
-              _buildStatItem('Valid Until', _currentBill != null ? _getFormattedDate(_currentBill!.validUntil) : 'N/A', Colors.blue),
-              _buildStatItem('Overdue', _currentBill?.isOverdue == true ? 'Yes' : 'No', _currentBill?.isOverdue == true ? Colors.red : kLivinkeyGreen),
-            ],
-          ),
-          if (hasBill && (_currentBill!.billingMonth != null && _currentBill!.billingMonth!.isNotEmpty)) ...[
-            Divider(color: Colors.white.withOpacity(0.06), height: 24),
+          if (hasBill && _currentBill!.billingMonth?.isNotEmpty == true) ...[
+            const SizedBox(height: 12),
             Row(
               children: [
-                _buildStatItem('Billing Month', _currentBill!.billingMonth!, Colors.teal),
-                _buildStatItem(
-                  'Period',
-                  (_currentBill!.periodFrom != null && _currentBill!.periodTill != null)
-                      ? '${_getFormattedDate(_currentBill!.periodFrom!)} – ${_getFormattedDate(_currentBill!.periodTill!)}'
-                      : 'N/A',
-                  Colors.tealAccent,
-                ),
+                Icon(Icons.calendar_month_outlined, size: 15, color: Colors.white.withOpacity(0.45)),
+                const SizedBox(width: 7),
+                Text('Current bill: ${_currentBill!.billingMonth}', style: TextStyle(color: Colors.white.withOpacity(0.62), fontSize: 12)),
+                if (_currentBill!.isOverdue) ...[
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(color: Colors.red.withOpacity(0.14), borderRadius: BorderRadius.circular(8)),
+                    child: const Text('OVERDUE', style: TextStyle(color: Colors.redAccent, fontSize: 9, fontWeight: FontWeight.w800)),
+                  ),
+                ],
               ],
             ),
           ],
-          if (hasBill) Divider(color: Colors.white.withOpacity(0.06), height: 24),
-          if (hasBill)
-            Column(
-              children: [
-                Row(
-                  children: [
-                    _buildStatItem('Rent', fmtINR(_currentBill!.rentAmount), Colors.white),
-                    _buildStatItem('Electricity', fmtINR(_currentBill!.electricityAmount), Colors.yellow),
-                  ],
-                ),
-                if (_currentBill!.maintenanceAmount > 0 || _currentBill!.otherCharges > 0)
-                  Row(
-                    children: [
-                      if (_currentBill!.maintenanceAmount > 0)
-                        _buildStatItem('Maintenance', fmtINR(_currentBill!.maintenanceAmount), Colors.cyan),
-                      if (_currentBill!.otherCharges > 0)
-                        _buildStatItem('Other', fmtINR(_currentBill!.otherCharges), Colors.purple),
-                    ],
+          if (hasBill) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.receipt_long_outlined, color: kLivinkeyGreen, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      totalOutstanding > currentDue + 0.005
+                          ? 'You have older unpaid bills too. You can pay just this bill or clear everything together below.'
+                          : 'This is the bill currently due for payment.',
+                      style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 12, height: 1.35),
+                    ),
                   ),
-                if (_currentBill!.fineAmount > 0)
-                  Row(
-                    children: [
-                      _buildStatItem('Late Fee', fmtINR(_currentBill!.fineAmount), Colors.red),
-                    ],
-                  ),
-              ],
+                ],
+              ),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniInfo(String label, String value, Color color) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.38), fontSize: 10.5)),
+          const SizedBox(height: 3),
+          Text(value, style: TextStyle(color: color, fontSize: 14.5, fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -439,28 +511,21 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   Future<void> _generatePartialQR() async {
     final bill = _currentBill;
     final amount = _partialAmount;
-    if (bill == null || amount == null) return;
-    final due = _getTotalDue();
-    if (bill.hasPendingPaymentProof) {
-      SnackbarHelper.showError(context, 'A payment proof is already awaiting admin verification. Please wait before making another payment.');
-      return;
-    }
-    if (bill.hasVerifiedPartial) {
-      SnackbarHelper.showError(context, 'A partial payment has already been made. You must pay the full remaining balance of ${fmtINR(due)}.');
-      return;
-    }
+    if (bill == null || amount == null || amount <= 0) return;
+    final due = _getScopeDue();
     if (amount > due + 0.005) {
-      SnackbarHelper.showError(context, 'Amount exceeds the current due of ${fmtINR(due)}.');
+      SnackbarHelper.showError(context, 'Amount exceeds the selected payment scope due of ${fmtINR(due)}.');
       return;
     }
     if (amount < due - 0.005 && amount < due * 0.5 - 0.005) {
-      SnackbarHelper.showError(context, 'Partial payment must be at least 50% of the current due: ${fmtINR(due * 0.5)}. You entered ${fmtINR(amount)}.');
+      SnackbarHelper.showError(context, 'Partial payment must be at least 50% of the selected payment scope: ${fmtINR(due * 0.5)}.');
       return;
     }
     setState(() => _isGeneratingPartialQr = true);
     try {
-      final response = await _api.generatePartialPaymentQR(
-        billId: bill.id,
+      final response = await _api.generatePaymentQR(
+        scope: _paymentScope,
+        billId: _paymentScope == 'bill' ? bill.id : null,
         amount: amount,
       );
       if (response['success'] == true) {
@@ -477,10 +542,41 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     }
   }
 
-  Future<void> _openUPIPayment(double amount) async {
+  Future<void> _generateScopedFullQR() async {
+    final bill = _currentBill;
+    final due = _getScopeDue();
+    if (bill == null || due <= 0) return;
+    setState(() => _isGeneratingScopedQr = true);
+    try {
+      final response = await _api.generatePaymentQR(
+        scope: _paymentScope,
+        billId: _paymentScope == 'bill' ? bill.id : null,
+        amount: due,
+      );
+      if (response['success'] == true) {
+        final data = Map<String, dynamic>.from(response['data'] ?? {});
+        setState(() {
+          _scopedQrUrl = data['qr_code']?.toString();
+          _scopedUpiLink = data['upi_link']?.toString();
+          _scopedQrAmount = due;
+        });
+      } else {
+        SnackbarHelper.showError(context, response['message']?.toString() ?? 'Unable to generate payment QR');
+      }
+    } finally {
+      if (mounted) setState(() => _isGeneratingScopedQr = false);
+    }
+  }
+
+  Future<void> _openUPIPayment(double amount, {String? scope}) async {
     final bill = _currentBill;
     if (bill == null) return;
-    final response = await _api.generatePartialPaymentQR(billId: bill.id, amount: amount);
+    final paymentScope = scope ?? _paymentScope;
+    final response = await _api.generatePaymentQR(
+      scope: paymentScope,
+      billId: paymentScope == 'bill' ? bill.id : null,
+      amount: amount,
+    );
     if (response['success'] != true) {
       SnackbarHelper.showError(context, response['message']?.toString() ?? 'Unable to open payment app');
       return;
@@ -499,13 +595,135 @@ class _PaymentsScreenState extends State<PaymentsScreen>
       final uri = Uri.tryParse(link);
       if (uri != null) {
         try {
-          if (await canLaunchUrl(uri) && await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-            return;
-          }
+          if (await canLaunchUrl(uri) && await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
         } catch (_) {}
       }
     }
     SnackbarHelper.showError(context, 'No supported UPI payment app is installed on this device. You can scan the QR code instead.');
+  }
+
+
+  Widget _buildPaymentScopeSelector() {
+    final totalOutstanding = _currentBill?.totalOutstanding ?? 0;
+    final currentDue = _getTotalDue();
+    if (totalOutstanding <= currentDue + 0.005) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Choose what you want to pay',
+              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text('Select one of the simple options below. Your QR amount will match your choice.',
+              style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 12)),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: PaymentChip(
+              label: 'Only this bill · ${fmtINR(currentDue)}',
+              isSelected: _paymentScope == 'bill',
+              onTap: () => _setPaymentScope('bill'),
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: PaymentChip(
+              label: 'Everything due · ${fmtINR(totalOutstanding)}',
+              isSelected: _paymentScope == 'outstanding',
+              onTap: () => _setPaymentScope('outstanding'),
+            )),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOutstandingBillsList() {
+    final bills = _currentBill?.outstandingBills ?? const <OutstandingBill>[];
+    if (bills.length <= 1) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.025),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withOpacity(0.07)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.receipt_long_outlined, color: kLivinkeyGreen, size: 19),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('Your unpaid bills', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800)),
+              ),
+              Text('${bills.length} bills', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'This list explains where your outstanding balance comes from. The payment choice above controls how much you pay.',
+            style: TextStyle(color: Colors.white.withOpacity(0.46), fontSize: 11.5, height: 1.35),
+          ),
+          const SizedBox(height: 12),
+          ...bills.map((item) {
+            final isCurrent = item.id == _currentBill?.id;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isCurrent ? kLivinkeyGreen.withOpacity(0.07) : Colors.black.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: isCurrent ? kLivinkeyGreen.withOpacity(0.18) : Colors.white.withOpacity(0.05)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34, height: 34,
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(10)),
+                    child: Icon(isCurrent ? Icons.star_rounded : Icons.receipt_outlined, size: 18, color: isCurrent ? kLivinkeyGreen : Colors.white54),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: Text(item.billingMonth ?? 'Bill', style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700))),
+                            if (isCurrent)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(color: kLivinkeyGreen.withOpacity(0.12), borderRadius: BorderRadius.circular(7)),
+                                child: const Text('CURRENT', style: TextStyle(color: kLivinkeyGreen, fontSize: 8.5, fontWeight: FontWeight.w900)),
+                              ),
+                          ],
+                        ),
+                        if (item.roomNumber != null) ...[
+                          const SizedBox(height: 3),
+                          Text('Room ${item.roomNumber}', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10.5)),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(fmtINR(item.dueAmount), style: const TextStyle(color: Colors.orange, fontSize: 13.5, fontWeight: FontWeight.w900)),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
   }
 
   Widget _buildPaymentDetailsCard() {
@@ -562,59 +780,50 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   Widget _buildQRSection() {
     switch (_selectedPaymentMethod) {
       case 0:
-        final qrUrl = _currentBill?.adminQr ?? _currentBill?.paymentQr;
-        final isAdminQr = _currentBill?.adminQr != null;
-        
-        return _buildQRCard(
-          title: isAdminQr ? 'Admin Payment QR' : 'Pay Online',
-          subtitle: isAdminQr 
-              ? 'QR code provided by admin' 
-              : 'Scan QR to pay via UPI',
-          qrColor: kLivinkeyGreen,
-          qrUrl: qrUrl,
-          amount: _getTotalDue(),
-          isPartial: false,
+        final due = _getScopeDue();
+        return Column(
+          children: [
+            _buildQRCard(
+              title: _paymentScope == 'outstanding' ? 'Total Outstanding Payment' : 'Pay This Bill',
+              subtitle: _paymentScope == 'outstanding'
+                  ? 'QR contains the exact total outstanding amount'
+                  : 'QR contains the exact amount due for this bill',
+              qrColor: kLivinkeyGreen,
+              qrUrl: _scopedQrUrl,
+              amount: _scopedQrAmount,
+              isPartial: false,
+              upiLink: _scopedUpiLink,
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isGeneratingScopedQr ? null : _generateScopedFullQR,
+                icon: _isGeneratingScopedQr
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.qr_code_2),
+                label: Text('Generate payment QR · ${fmtINR(due)}'),
+              ),
+            ),
+          ],
         );
-        
+
       case 1:
         return _buildCashPaymentCard();
-        
+
       case 2:
-        final due = _getTotalDue();
-        final partialLocked = _currentBill?.hasVerifiedPartial == true;
-        final pendingLocked = _currentBill?.hasPendingPaymentProof == true;
+        final due = _getScopeDue();
         if (_partialAmount == null || _partialAmount! > due) {
           _partialAmount = due;
         }
-        if (partialLocked || pendingLocked) {
-          return Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Colors.orange.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.orange.withOpacity(0.22)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [const Icon(Icons.info_outline, color: Colors.orange), const SizedBox(width: 10), Expanded(child: Text(
-                  pendingLocked ? 'Payment proof awaiting verification' : 'Partial payment already used for this bill',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                ))]),
-                const SizedBox(height: 8),
-                Text(
-                  pendingLocked
-                      ? 'Please wait until the submitted payment is verified. No second payment can be submitted while it is pending.'
-                      : 'You can no longer make another partial payment. The remaining balance must be paid in full: ${fmtINR(due)}.',
-                  style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 13),
-                ),
-              ],
-            ),
-          );
-        }
         return Column(
           children: [
+            Text(
+              'Minimum 50% of selected scope: ${fmtINR(due * 0.5)}',
+              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
             TextField(
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               style: const TextStyle(color: Colors.white),
@@ -623,7 +832,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                 labelStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
                 prefixText: '₹ ',
                 prefixStyle: const TextStyle(color: Colors.orange),
-                helperText: 'Minimum 50% of current due; one partial payment per bill.',
+                helperText: 'One partial payment per bill; subsequent payment must settle that bill.',
                 helperStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
                 filled: true,
                 fillColor: Colors.white.withOpacity(0.05),
@@ -645,8 +854,8 @@ class _PaymentsScreenState extends State<PaymentsScreen>
             ),
             const SizedBox(height: 12),
             _buildQRCard(
-              title: 'Partial Payment',
-              subtitle: 'QR is generated for the amount you entered',
+              title: _paymentScope == 'outstanding' ? 'Partial Outstanding Payment' : 'Partial Bill Payment',
+              subtitle: 'QR is generated for the exact amount entered',
               qrColor: Colors.orange,
               qrUrl: _partialQrUrl,
               amount: _partialAmount,
@@ -759,7 +968,7 @@ class _PaymentsScreenState extends State<PaymentsScreen>
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: OutlinedButton.icon(
-                  onPressed: () => _openUPIPayment(displayAmount),
+                  onPressed: () => _openUPIPayment(displayAmount, scope: _paymentScope),
                   icon: const Icon(Icons.open_in_new),
                   label: const Text('Open UPI Payment App'),
                 ),
@@ -978,14 +1187,25 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   }
 
   Widget _buildSubmitProofButton() {
-    final isPaid = _currentBill?.status == 'paid';
+    final currentDue = _getTotalDue();
+    final totalOutstanding = _currentBill?.totalOutstanding ?? 0;
+    final hasOutstandingBalance = totalOutstanding > 0.005;
+    final currentBillPaid = currentDue <= 0.005;
+    final canSubmitProof = hasOutstandingBalance;
+    final label = currentBillPaid && hasOutstandingBalance
+        ? 'Submit Outstanding Payment Proof'
+        : 'Submit Payment Proof';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: ElevatedButton(
-        onPressed: isPaid ? null : () => _showSubmitProofDialog(),
+        // A paid current bill must not disable proof submission when older
+        // bills are still outstanding. In that case the dialog automatically
+        // switches to the outstanding payment scope.
+        onPressed: canSubmitProof ? () => _showSubmitProofDialog() : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor: isPaid ? Colors.grey : kLivinkeyGreen,
+          backgroundColor: canSubmitProof ? kLivinkeyGreen : Colors.grey,
           foregroundColor: Colors.black,
           elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -994,14 +1214,14 @@ class _PaymentsScreenState extends State<PaymentsScreen>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.upload_file_rounded, size: 20, color: isPaid ? Colors.grey : Colors.black),
+            Icon(Icons.upload_file_rounded, size: 20, color: canSubmitProof ? Colors.black : Colors.grey),
             const SizedBox(width: 10),
             Text(
-              isPaid ? 'Bill Already Paid' : 'Submit Payment Proof',
+              canSubmitProof ? label : 'No Payment Due',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 15,
-                color: isPaid ? Colors.grey : Colors.black,
+                color: canSubmitProof ? Colors.black : Colors.grey,
               ),
             ),
           ],
@@ -1130,6 +1350,10 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   }
 
   void _showSubmitProofDialog() {
+    String proofScope = _paymentScope;
+    if (_getTotalDue() <= 0.005 && (_currentBill?.totalOutstanding ?? 0) > 0.005) {
+      proofScope = 'outstanding';
+    }
     _transactionIdController.clear();
     _amountController.clear();
     setState(() => _paymentScreenshotPath = null);
@@ -1182,6 +1406,32 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                     ],
                   ),
                   const SizedBox(height: 20),
+
+                  if ((_currentBill?.totalOutstanding ?? 0) > 0.005 &&
+                      ((_currentBill?.totalOutstanding ?? 0) > _getTotalDue() + 0.005 || _getTotalDue() <= 0.005))
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Payment Scope', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 8),
+                        Row(children: [
+                          if (_getTotalDue() > 0.005) ...[
+                            Expanded(child: PaymentChip(
+                              label: 'This Bill · ${fmtINR(_getTotalDue())}',
+                              isSelected: proofScope == 'bill',
+                              onTap: () => setDialogState(() => proofScope = 'bill'),
+                            )),
+                            const SizedBox(width: 8),
+                          ],
+                          Expanded(child: PaymentChip(
+                            label: 'All Due · ${fmtINR(_currentBill?.totalOutstanding ?? 0)}',
+                            isSelected: proofScope == 'outstanding',
+                            onTap: () => setDialogState(() => proofScope = 'outstanding'),
+                          )),
+                        ]),
+                        const SizedBox(height: 14),
+                      ],
+                    ),
 
                   TextField(
                     controller: _transactionIdController,
@@ -1316,26 +1566,20 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                               return;
                             }
 
-                            final due = _getTotalDue();
+                            final due = proofScope == 'outstanding'
+                                ? (_currentBill?.totalOutstanding ?? 0)
+                                : _getTotalDue();
                             if (amount == null || amount <= 0) {
                               SnackbarHelper.showError(context, 'Please enter a valid amount');
                               return;
                             }
-                            if (_currentBill?.hasPendingPaymentProof == true) {
-                              SnackbarHelper.showError(context, 'A payment proof is already awaiting admin verification. Please wait before submitting another payment.');
-                              return;
-                            }
                             if (amount > due + 0.005) {
-                              SnackbarHelper.showError(context, 'Amount exceeds the current due of ${fmtINR(due)}.');
+                              SnackbarHelper.showError(context, 'Amount exceeds the selected payment scope due of ${fmtINR(due)}.');
                               return;
                             }
                             final isPartial = amount < due - 0.005;
-                            if (_currentBill?.hasVerifiedPartial == true && isPartial) {
-                              SnackbarHelper.showError(context, 'A partial payment has already been made. You must pay the full remaining balance of ${fmtINR(due)}.');
-                              return;
-                            }
                             if (isPartial && amount < due * 0.5 - 0.005) {
-                              SnackbarHelper.showError(context, 'Partial payment must be at least 50% of the current due: ${fmtINR(due * 0.5)}. You entered ${fmtINR(amount)}.');
+                              SnackbarHelper.showError(context, 'Partial payment must be at least 50% of the selected payment scope: ${fmtINR(due * 0.5)}.');
                               return;
                             }
 
@@ -1348,7 +1592,9 @@ class _PaymentsScreenState extends State<PaymentsScreen>
 
                             try {
                               final response = await _api.submitPaymentProof(
-                                billId: _currentBill?.id ?? 0,
+                                billId: proofScope == 'bill' ? (_currentBill?.id ?? 0) : 0,
+                                paymentScope: proofScope,
+                                paymentTargetBillId: proofScope == 'bill' ? (_currentBill?.id ?? 0) : null,
                                 transactionId: transactionId,
                                 amountPaid: amount,
                                 paymentScreenshot: _paymentScreenshotPath!,

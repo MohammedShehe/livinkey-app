@@ -87,7 +87,8 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
             _guestName = data['name']?.toString() ?? 
                         data['full_name']?.toString() ?? 
                         'Guest User';
-            _greeting = data['greeting']?.toString() ?? getTimeOfDay();
+            // Always use local device time for greeting (API greeting can be wrong timezone)
+            _greeting = getTimeOfDay();
             _totalPGs = data['total_pgs'] ?? 0;
             _isTenantViewingAsGuest = data['is_tenant_viewing_as_guest'] ?? false;
             _placeholderInitials = data['placeholder_initials'] ?? '';
@@ -127,6 +128,8 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
             }
             
             _applyFilter();
+            // Enrich with floors so vacant = completely empty rooms only
+            await _enrichPgsWithEmptyRooms();
           } else {
             if (data is Map<String, dynamic> && data['data'] is List) {
               final innerData = data['data'] as List;
@@ -136,6 +139,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
                 _totalPGs = _allPgs.length;
               }
               _applyFilter();
+              await _enrichPgsWithEmptyRooms();
             } else {
               _allPgs = [];
               _filteredPgs = [];
@@ -184,6 +188,51 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
         _filteredPgs = _allPgs.where((pg) => pg.statusText == _selectedFilter).toList();
       }
     });
+  }
+
+  /// Enrich PGs that lack floors data by fetching details so emptyRoomsCount works.
+  /// Mirrors the web app's countEmptyRooms / enrichPGsWithEmptyRooms logic.
+  Future<void> _enrichPgsWithEmptyRooms() async {
+    if (_allPgs.isEmpty) return;
+    final futures = _allPgs.asMap().entries.map((entry) async {
+      final index = entry.key;
+      final pg = entry.value;
+      if (pg.floors.isNotEmpty) return;
+      try {
+        final response = await _api.getPublicPGDetails(pg.id);
+        if (response['success'] == true && response['data'] != null) {
+          final detail = PgModel.fromJson(response['data']);
+          if (detail.floors.isNotEmpty && mounted) {
+            _allPgs[index] = PgModel(
+              id: pg.id,
+              name: pg.name,
+              location: pg.location,
+              rating: pg.rating,
+              totalRooms: pg.totalRooms > 0 ? pg.totalRooms : detail.totalRooms,
+              totalCapacity: pg.totalCapacity > 0 ? pg.totalCapacity : detail.totalCapacity,
+              totalOccupied: pg.totalOccupied > 0 ? pg.totalOccupied : detail.totalOccupied,
+              rent: pg.rent,
+              securityFee: pg.securityFee,
+              numberOfFloors: pg.numberOfFloors,
+              isActive: pg.isActive,
+              coverImage: pg.coverImage ?? detail.coverImage,
+              images: pg.images.isNotEmpty ? pg.images : detail.images,
+              amenityNames: pg.amenityNames.isNotEmpty ? pg.amenityNames : detail.amenityNames,
+              statusText: pg.statusText,
+              occupancyPercentage: pg.occupancyPercentage,
+              floors: detail.floors,
+              reviews: pg.reviews.isNotEmpty ? pg.reviews : detail.reviews,
+            );
+          }
+        }
+      } catch (_) {
+        // Keep original if detail fetch fails
+      }
+    });
+    await Future.wait(futures);
+    if (mounted) {
+      _applyFilter();
+    }
   }
 
   void _openDrawer() {

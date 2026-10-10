@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 
 import '../../utils/constants.dart';
@@ -33,7 +35,7 @@ class _HomeScreenState extends State<HomeScreen>
   final ApiService _api = ApiService();
 
   // Home data
-  String _greeting = '';
+  String _greeting = getTimeOfDay();
   String _tenantName = '';
   String _email = '';
   String _pgName = '';
@@ -48,15 +50,22 @@ class _HomeScreenState extends State<HomeScreen>
   int _daysLeft = 0;
   String? _paidFrom;
   String? _paidTill;
+  String? _rentStatusMessage;
 
   // Current bill
   Map<String, dynamic>? _currentBill;
+
+  // Outstanding balance
+  double _outstandingAmount = 0;
+  int _outstandingBillCount = 0;
 
   // Maintenance stats
   int _maintenanceTotal = 0;
   int _maintenancePending = 0;
   int _maintenanceInProgress = 0;
   int _maintenanceCompleted = 0;
+
+  List<Map<String, dynamic>> _ads = [];
 
   // ============================================================
   // Safe type conversion helpers
@@ -131,7 +140,8 @@ class _HomeScreenState extends State<HomeScreen>
         
         // Tenant data
         final tenant = data['tenant'] ?? {};
-        _greeting = _safeToString(data['greeting']);
+        // Always use local device time for greeting (API greeting can be wrong timezone)
+        _greeting = getTimeOfDay();
         _tenantName = _safeToString(tenant['full_name']);
         _email = _safeToString(tenant['email']);
         _pgName = _safeToString(tenant['pg_name']);
@@ -153,6 +163,9 @@ class _HomeScreenState extends State<HomeScreen>
         _paidTill = rentStatus['paid_till'] != null 
             ? _safeToString(rentStatus['paid_till']) 
             : null;
+        _rentStatusMessage = rentStatus['message'] != null
+            ? _safeToString(rentStatus['message'])
+            : null;
 
         // Current bill
         _currentBill = data['current_bill'] as Map<String, dynamic>?;
@@ -162,12 +175,23 @@ class _HomeScreenState extends State<HomeScreen>
           _currentBill!['fine_amount'] = _safeToDouble(_currentBill!['fine_amount']);
         }
 
+        // Outstanding balance
+        final outstanding = data['outstanding'] ?? {};
+        _outstandingAmount = _safeToDouble(outstanding['total_amount']);
+        _outstandingBillCount = _safeToInt(outstanding['bill_count']);
+
         // Maintenance stats
         final maintenance = data['maintenance'] ?? {};
         _maintenanceTotal = _safeToInt(maintenance['total']);
         _maintenancePending = _safeToInt(maintenance['pending']);
         _maintenanceInProgress = _safeToInt(maintenance['in_progress']);
         _maintenanceCompleted = _safeToInt(maintenance['completed']);
+
+        final adsResponse = await _api.getLivinkeyAds();
+        if (adsResponse['success'] == true) {
+          final rawAds = adsResponse['data'];
+          _ads = rawAds is List ? rawAds.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : [];
+        }
 
         await NotificationService().refresh(isTenant: true);
         
@@ -213,7 +237,8 @@ class _HomeScreenState extends State<HomeScreen>
         final data = response['data'];
         
         final tenant = data['tenant'] ?? {};
-        _greeting = _safeToString(data['greeting']);
+        // Always use local device time for greeting (API greeting can be wrong timezone)
+        _greeting = getTimeOfDay();
         _tenantName = _safeToString(tenant['full_name']);
         _email = _safeToString(tenant['email']);
         _pgName = _safeToString(tenant['pg_name']);
@@ -236,6 +261,9 @@ class _HomeScreenState extends State<HomeScreen>
         _paidTill = rentStatus['paid_till'] != null 
             ? _safeToString(rentStatus['paid_till']) 
             : null;
+        _rentStatusMessage = rentStatus['message'] != null
+            ? _safeToString(rentStatus['message'])
+            : null;
 
         _currentBill = data['current_bill'] as Map<String, dynamic>?;
         if (_currentBill != null) {
@@ -249,6 +277,12 @@ class _HomeScreenState extends State<HomeScreen>
         _maintenancePending = _safeToInt(maintenance['pending']);
         _maintenanceInProgress = _safeToInt(maintenance['in_progress']);
         _maintenanceCompleted = _safeToInt(maintenance['completed']);
+
+        final adsResponse = await _api.getLivinkeyAds();
+        if (adsResponse['success'] == true) {
+          final rawAds = adsResponse['data'];
+          _ads = rawAds is List ? rawAds.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : [];
+        }
 
         await NotificationService().refresh(isTenant: true);
         
@@ -295,11 +329,24 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   String _getRentStatusSubtitle() {
-    if (_rentStatus == 'paid') {
-      return 'Paid till ${_paidTill ?? 'N/A'}';
-    } else {
-      return 'Overdue by $_dueDays days';
+    if (_rentStatusMessage != null && _rentStatusMessage!.isNotEmpty) {
+      return _rentStatusMessage!;
     }
+    if (_rentStatus == 'paid') {
+      if (_paidTill != null && _paidTill!.isNotEmpty) {
+        try {
+          final d = DateTime.parse(_paidTill!);
+          return 'Covered until ${DateFormat('dd MMM yyyy').format(d)}';
+        } catch (_) {
+          return 'Covered until $_paidTill';
+        }
+      }
+      return 'Rent is paid up to date';
+    }
+    if (_dueDays > 0) {
+      return _dueDays == 1 ? 'Overdue by 1 day' : 'Overdue by $_dueDays days';
+    }
+    return 'Payment coverage not set';
   }
 
   Color _getRentStatusColor() {
@@ -630,6 +677,18 @@ class _HomeScreenState extends State<HomeScreen>
                           onTap: () => _navigateToTab(2),
                         ),
                         StatCard(
+                          icon: Icons.account_balance_wallet_rounded,
+                          title: 'Outstanding',
+                          value: _outstandingAmount > 0.005
+                              ? fmtINR(_outstandingAmount)
+                              : 'Paid',
+                          subtitle: _outstandingAmount > 0.005
+                              ? '$_outstandingBillCount unpaid ${_outstandingBillCount == 1 ? 'bill' : 'bills'}'
+                              : 'No outstanding balance',
+                          color: _outstandingAmount > 0.005 ? Colors.red : Colors.green,
+                          onTap: () => _navigateToTab(1),
+                        ),
+                        StatCard(
                           icon: Icons.receipt_rounded,
                           title: 'Current Bill',
                           value: _currentBill != null
@@ -708,12 +767,286 @@ class _HomeScreenState extends State<HomeScreen>
                       ],
                     ),
 
+                    if (_ads.isNotEmpty) ...[
+                      const SizedBox(height: 28),
+                      Row(
+                        children: [
+                          Container(width: 4, height: 18, decoration: BoxDecoration(color: kLivinkeyGreen, borderRadius: BorderRadius.circular(2))),
+                          const SizedBox(width: 8),
+                          const Text('Advertisements', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      _TenantAdsCarousel(ads: _ads),
+                    ],
                     const SizedBox(height: 16),
                   ],
                 ),
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+
+
+class _TenantAdsCarousel extends StatefulWidget {
+  final List<Map<String, dynamic>> ads;
+  const _TenantAdsCarousel({required this.ads});
+  @override
+  State<_TenantAdsCarousel> createState() => _TenantAdsCarouselState();
+}
+
+class _TenantAdsCarouselState extends State<_TenantAdsCarousel> {
+  final PageController _controller = PageController();
+  Timer? _slideTimer;
+  int _index = 0;
+
+  /// Flatten all images across ads in order: ad1-img1, ad1-img2, ..., ad2-img1, ...
+  List<_AdSlide> get _slides {
+    final slides = <_AdSlide>[];
+    for (final ad in widget.ads) {
+      final raw = ad['images'];
+      if (raw is! List) continue;
+      final link = (ad['link_url'] ?? '').toString().trim();
+      final title = (ad['title'] ?? '').toString();
+      for (final x in raw) {
+        final url = x is Map
+            ? (x['url'] ?? x['image_url'] ?? '').toString()
+            : x.toString();
+        if (url.isEmpty) continue;
+        slides.add(_AdSlide(imageUrl: url, linkUrl: link, title: title));
+      }
+    }
+    return slides;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startTimer());
+  }
+
+  @override
+  void didUpdateWidget(covariant _TenantAdsCarousel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.ads != widget.ads) {
+      _index = 0;
+      if (_controller.hasClients) {
+        _controller.jumpToPage(0);
+      }
+      _startTimer();
+    }
+  }
+
+  void _startTimer() {
+    _slideTimer?.cancel();
+    final slides = _slides;
+    if (slides.length <= 1) return;
+    _slideTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || !_controller.hasClients) return;
+      final next = (_index + 1) % slides.length;
+      _controller.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _slideTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openLink(String url) async {
+    if (url.isEmpty) return;
+    try {
+      final uri = Uri.parse(url.startsWith('http') ? url : 'https://$url');
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final slides = _slides;
+    if (slides.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 225,
+          child: PageView.builder(
+            controller: _controller,
+            itemCount: slides.length,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemBuilder: (context, index) {
+              final slide = slides[index];
+              return _TenantAdSlideCard(
+                slide: slide,
+                position: index,
+                total: slides.length,
+                onTap: slide.linkUrl.isNotEmpty ? () => _openLink(slide.linkUrl) : null,
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            slides.length,
+            (i) => AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: i == _index ? 20 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: i == _index ? kLivinkeyGreen : Colors.white24,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AdSlide {
+  final String imageUrl;
+  final String linkUrl;
+  final String title;
+  const _AdSlide({
+    required this.imageUrl,
+    required this.linkUrl,
+    required this.title,
+  });
+}
+
+class _TenantAdSlideCard extends StatelessWidget {
+  final _AdSlide slide;
+  final int position;
+  final int total;
+  final VoidCallback? onTap;
+
+  const _TenantAdSlideCard({
+    required this.slide,
+    required this.position,
+    required this.total,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            colors: [
+              Colors.white.withOpacity(.08),
+              Colors.white.withOpacity(.025),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(color: kLivinkeyGreen.withOpacity(.22)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              slide.imageUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                color: Colors.white.withOpacity(.04),
+                child: const Icon(
+                  Icons.image_not_supported_outlined,
+                  color: Colors.white38,
+                  size: 48,
+                ),
+              ),
+              loadingBuilder: (context, child, progress) => progress == null
+                  ? child
+                  : const Center(
+                      child: CircularProgressIndicator(color: kLivinkeyGreen),
+                    ),
+            ),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withOpacity(.84),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 18,
+              right: 18,
+              bottom: 16,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      slide.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (slide.linkUrl.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.open_in_new_rounded,
+                      color: Colors.white.withOpacity(0.85),
+                      size: 18,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Positioned(
+              top: 12,
+              right: 12,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(.55),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${position + 1}/$total',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

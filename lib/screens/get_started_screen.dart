@@ -181,9 +181,6 @@ class _GetStartedScreenState extends State<GetStartedScreen>
 
   @override
   Widget build(BuildContext context) {
-    final Size screenSize = MediaQuery.of(context).size;
-    final double logoWidth = (screenSize.width * 0.62).clamp(180.0, 320.0);
-
     return WillPopScope(
       onWillPop: _onWillPop,
       child: AnnotatedRegion<SystemUiOverlayStyle>(
@@ -198,6 +195,20 @@ class _GetStartedScreenState extends State<GetStartedScreen>
           body: SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
+                final availableWidth = constraints.maxWidth.isFinite
+                    ? constraints.maxWidth
+                    : MediaQuery.of(context).size.width;
+                final horizontalPadding = availableWidth < 180
+                    ? 4.0
+                    : availableWidth < 360
+                        ? 12.0
+                        : 28.0;
+                final compact = availableWidth < 300;
+                final tiny = availableWidth < 180;
+                final responsiveLogoWidth = (availableWidth -
+                        horizontalPadding * 2 -
+                        (compact ? 16 : 40))
+                    .clamp(32.0, 320.0).toDouble();
                 return FadeTransition(
                   opacity: _fadeAnimation,
                   child: AnimatedBuilder(
@@ -205,7 +216,7 @@ class _GetStartedScreenState extends State<GetStartedScreen>
                     builder: (context, _) {
                       return SingleChildScrollView(
                         physics: const ClampingScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 28),
+                        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                         child: ConstrainedBox(
                           constraints: BoxConstraints(
                             minHeight: constraints.maxHeight,
@@ -219,9 +230,9 @@ class _GetStartedScreenState extends State<GetStartedScreen>
                                 ScaleTransition(
                                   scale: _scaleAnimation,
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 30,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: compact ? 8 : 20,
+                                      vertical: compact ? 16 : 30,
                                     ),
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
@@ -241,7 +252,7 @@ class _GetStartedScreenState extends State<GetStartedScreen>
                                     ),
                                     child: logo.LivinkeyLogoKeyBounce(
                                       bounceAnimation: _keyBounceAnimation,
-                                      width: logoWidth,
+                                      width: responsiveLogoWidth,
                                     ),
                                   ),
                                 ),
@@ -251,9 +262,9 @@ class _GetStartedScreenState extends State<GetStartedScreen>
                                 Transform.translate(
                                   offset: Offset(0, _slideAnimation.value),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 16,
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: compact ? 8 : 24,
+                                      vertical: compact ? 12 : 16,
                                     ),
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
@@ -277,7 +288,7 @@ class _GetStartedScreenState extends State<GetStartedScreen>
                                           textAlign: TextAlign.center,
                                           style: TextStyle(
                                             color: kLivinkeyWhite.withOpacity(0.7),
-                                            fontSize: 16,
+                                            fontSize: tiny ? 11 : compact ? 13 : 16,
                                             fontWeight: FontWeight.w400,
                                             letterSpacing: 0.5,
                                           ),
@@ -295,9 +306,9 @@ class _GetStartedScreenState extends State<GetStartedScreen>
                                           child: Text(
                                             'Livinkey',
                                             textAlign: TextAlign.center,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               color: kLivinkeyWhite,
-                                              fontSize: 38,
+                                              fontSize: tiny ? 18 : compact ? 28 : 38,
                                               fontWeight: FontWeight.w800,
                                               letterSpacing: 1.2,
                                             ),
@@ -330,7 +341,7 @@ class _GetStartedScreenState extends State<GetStartedScreen>
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         color: Colors.white.withOpacity(0.8),
-                                        fontSize: 15,
+                                        fontSize: tiny ? 11 : compact ? 13 : 15,
                                         height: 1.6,
                                         fontWeight: FontWeight.w400,
                                       ),
@@ -430,20 +441,26 @@ class _GetStartedScreenState extends State<GetStartedScreen>
               ),
             );
           },
-          child: const Row(
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                'Get Started',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black,
-                  letterSpacing: 0.5,
+              Flexible(
+                child: Text(
+                  'Get Started',
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-              SizedBox(width: 8),
-              Icon(
+              const SizedBox(width: 8),
+              const Icon(
                 Icons.arrow_forward_rounded,
                 color: Colors.black,
                 size: 22,
@@ -463,7 +480,10 @@ class _GetStartedScreenState extends State<GetStartedScreen>
     );
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: MediaQuery.of(context).size.width < 180 ? 4 : 16,
+        vertical: 12,
+      ),
       decoration: BoxDecoration(
         color: kLivinkeyWhite.withOpacity(0.02),
         borderRadius: BorderRadius.circular(12),

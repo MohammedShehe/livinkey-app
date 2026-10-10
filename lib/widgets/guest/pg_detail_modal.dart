@@ -309,8 +309,8 @@ class _PgDetailModalState extends State<PgDetailModal> {
                             const SizedBox(height: 16),
 
                             // ============================================================
-                            // FIXED: Now shows correct room counts because _pg has
-                            // the merged data (list values preserved)
+                            // FIXED: Count only COMPLETELY empty rooms (occupiedCount == 0)
+                            // A room occupied by even 1 tenant is not shown as available.
                             // ============================================================
                             Row(
                               children: [
@@ -322,8 +322,8 @@ class _PgDetailModalState extends State<PgDetailModal> {
                                 _buildRoomInfo(
                                   icon: Icons.person_outline_rounded,
                                   label: 'Available',
-                                  value: (_pg.totalCapacity - _pg.totalOccupied).toString(),
-                                  color: _pg.totalCapacity - _pg.totalOccupied > 0
+                                  value: (_pg.emptyRoomsCount ?? 0).toString(),
+                                  color: (_pg.emptyRoomsCount ?? 0) > 0
                                       ? kLivinkeyGreen
                                       : Colors.red,
                                 ),

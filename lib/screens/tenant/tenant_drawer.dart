@@ -9,6 +9,8 @@ import '../../utils/helpers.dart';
 import '../../widgets/common/snackbar_helper.dart';
 import '../auth/login_screen.dart';
 import '../guest/guest_screen.dart';
+import 'agreements_screen.dart';
+import 'notices_screen.dart';
 
 class TenantDrawer extends StatelessWidget {
   const TenantDrawer({super.key});
@@ -40,81 +42,103 @@ class TenantDrawer extends StatelessWidget {
             Expanded(
               child: Column(
                 children: [
-                  _buildDrawerItem(
-                    icon: Icons.home_rounded,
-                    title: 'Home',
-                    onTap: () => Navigator.pop(context),
+                  Expanded(
+                    child: ListView(
+                      padding: EdgeInsets.zero,
+                      children: [
+                        _buildDrawerItem(
+                          icon: Icons.home_rounded,
+                          title: 'Home',
+                          onTap: () => Navigator.pop(context),
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.payment_rounded,
+                          title: 'Payments',
+                          onTap: () {
+                            Navigator.pop(context);
+                            final state = context.findAncestorStateOfType<TenantScreenState>();
+                            state?.navigateToTab(1);
+                          },
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.build_rounded,
+                          title: 'Maintenance',
+                          onTap: () {
+                            Navigator.pop(context);
+                            final state = context.findAncestorStateOfType<TenantScreenState>();
+                            state?.navigateToTab(2);
+                          },
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.folder_rounded,
+                          title: 'Documents',
+                          onTap: () {
+                            Navigator.pop(context);
+                            final state = context.findAncestorStateOfType<TenantScreenState>();
+                            state?.navigateToTab(3);
+                          },
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.campaign_rounded,
+                          title: 'Notices',
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NoticesScreen()));
+                          },
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.description_rounded,
+                          title: 'Agreements',
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AgreementsScreen()));
+                          },
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.person_rounded,
+                          title: 'Profile',
+                          onTap: () {
+                            Navigator.pop(context);
+                            final state = context.findAncestorStateOfType<TenantScreenState>();
+                            state?.navigateToTab(4);
+                          },
+                        ),
+                        const Divider(color: Colors.white24, height: 24),
+                        _buildDrawerItem(
+                          icon: Icons.switch_account_rounded,
+                          title: 'Enter as Guest',
+                          color: const Color(0xFFFF9800),
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const GuestScreen()),
+                            );
+                          },
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.description_rounded,
+                          title: 'Terms of Service',
+                          onTap: () => _launchUrl(context, kTermsUrl),
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.privacy_tip_rounded,
+                          title: 'Privacy Policy',
+                          onTap: () => _launchUrl(context, kPrivacyUrl),
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.support_agent_rounded,
+                          title: 'Support',
+                          onTap: () => _showSupportOptions(context),
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.logout_rounded,
+                          title: 'Logout',
+                          color: Colors.red,
+                          onTap: () => _handleLogout(context),
+                        ),
+                      ],
+                    ),
                   ),
-                  _buildDrawerItem(
-                    icon: Icons.payment_rounded,
-                    title: 'Payments',
-                    onTap: () {
-                      Navigator.pop(context);
-                      final state = context.findAncestorStateOfType<TenantScreenState>();
-                      state?.navigateToTab(1);
-                    },
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.build_rounded,
-                    title: 'Maintenance',
-                    onTap: () {
-                      Navigator.pop(context);
-                      final state = context.findAncestorStateOfType<TenantScreenState>();
-                      state?.navigateToTab(2);
-                    },
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.folder_rounded,
-                    title: 'Documents',
-                    onTap: () {
-                      Navigator.pop(context);
-                      final state = context.findAncestorStateOfType<TenantScreenState>();
-                      state?.navigateToTab(3);
-                    },
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.person_rounded,
-                    title: 'Profile',
-                    onTap: () {
-                      Navigator.pop(context);
-                      final state = context.findAncestorStateOfType<TenantScreenState>();
-                      state?.navigateToTab(4);
-                    },
-                  ),
-                  const Divider(color: Colors.white24, height: 24),
-                  _buildDrawerItem(
-                    icon: Icons.switch_account_rounded,
-                    title: 'Enter as Guest',
-                    color: const Color(0xFFFF9800),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const GuestScreen()),
-                      );
-                    },
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.description_rounded,
-                    title: 'Terms of Service',
-                    onTap: () => _launchUrl(context, kTermsUrl),
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.privacy_tip_rounded,
-                    title: 'Privacy Policy',
-                    onTap: () => _launchUrl(context, kPrivacyUrl),
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.support_agent_rounded,
-                    title: 'Support',
-                    onTap: () => _showSupportOptions(context),
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.logout_rounded,
-                    title: 'Logout',
-                    color: Colors.red,
-                    onTap: () => _handleLogout(context),
-                  ),
-                  const Spacer(),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(

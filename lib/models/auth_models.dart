@@ -29,6 +29,7 @@ class UserModel {
   final String? paidFrom;
   final String? paidTill;
   final String? arrivalDate;
+  final int? periodOfStay;
   final String? aadhaarId;
   final String? fatherAadhaarId;
   final String? cFormNumber;
@@ -58,6 +59,7 @@ class UserModel {
     this.paidFrom,
     this.paidTill,
     this.arrivalDate,
+    this.periodOfStay,
     this.aadhaarId,
     this.fatherAadhaarId,
     this.cFormNumber,
@@ -163,6 +165,7 @@ class UserModel {
       paidFrom: json['paid_from'],
       paidTill: json['paid_till'],
       arrivalDate: json['arrival_date'],
+      periodOfStay: _parseInt(json['period_of_stay']),
       aadhaarId: json['aadhaar_id'],
       fatherAadhaarId: json['father_aadhaar_id'],
       cFormNumber: json['c_form_number'],
@@ -197,6 +200,7 @@ class LoginResponse {
   final String? token;
   final UserModel? user;
   final bool mustChangePassword;
+  final Map<String, dynamic>? agreement;
 
   LoginResponse({
     required this.success,
@@ -204,6 +208,7 @@ class LoginResponse {
     this.token,
     this.user,
     this.mustChangePassword = false,
+    this.agreement,
   });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) {
@@ -268,6 +273,7 @@ class LoginResponse {
       token: token,
       user: user,
       mustChangePassword: mustChangePassword,
+      agreement: json['agreement'] is Map ? Map<String, dynamic>.from(json['agreement']) : null,
     );
   }
 }

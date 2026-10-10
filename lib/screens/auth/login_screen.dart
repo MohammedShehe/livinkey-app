@@ -330,8 +330,6 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final double logoSize = _getLogoSize(context);
-
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -365,23 +363,26 @@ class _LoginScreenState extends State<LoginScreen>
                     position: _slideAnimation,
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: MediaQuery.of(context).size.width < 360 ? 12 : 24,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SizedBox(height: 20),
 
-                          // Top section with logo
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Column(
+                          // Responsive header: use a vertical arrangement when
+                          // the actual content area is too narrow for a row.
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final compact = constraints.maxWidth < 300;
+                              final heading = Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                     'Welcome Back!',
                                     style: TextStyle(
-                                      fontSize: 29,
+                                      fontSize: compact ? 23 : 29,
                                       fontWeight: FontWeight.w800,
                                       color: Colors.white,
                                       letterSpacing: -0.6,
@@ -390,16 +391,17 @@ class _LoginScreenState extends State<LoginScreen>
                                   const SizedBox(height: 5),
                                   Text(
                                     'Sign in to continue your journey',
+                                    softWrap: true,
                                     style: TextStyle(
-                                      fontSize: 15,
+                                      fontSize: compact ? 12 : 15,
                                       fontWeight: FontWeight.w400,
                                       color: Colors.white.withOpacity(0.5),
                                       letterSpacing: 0.2,
                                     ),
                                   ),
                                 ],
-                              ),
-                              ScaleTransition(
+                              );
+                              final logo = ScaleTransition(
                                 scale: _logoScaleAnimation,
                                 child: Container(
                                   padding: const EdgeInsets.all(4),
@@ -408,18 +410,40 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
                                   child: Image.asset(
                                     kGeneralLogo,
-                                    height: logoSize,
-                                    width: logoSize,
+                                    height: compact ? 48 : 64,
+                                    width: compact ? 48 : 64,
                                     fit: BoxFit.contain,
                                   ),
                                 ),
-                              ),
-                            ],
+                              );
+
+                              if (compact) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    heading,
+                                    const SizedBox(height: 12),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: logo,
+                                    ),
+                                  ],
+                                );
+                              }
+
+                              return Row(
+                                children: [
+                                  Expanded(child: heading),
+                                  const SizedBox(width: 12),
+                                  logo,
+                                ],
+                              );
+                            },
                           ),
 
                           const SizedBox(height: 24),
 
-                          // Role toggle
+                          // Role toggle adapts to narrow available widths.
                           Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
@@ -430,73 +454,69 @@ class _LoginScreenState extends State<LoginScreen>
                                 width: 1,
                               ),
                             ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: GestureDetector(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                Widget buildRoleOption({required bool tenant}) {
+                                  final selected =
+                                      tenant ? _isTenantLogin : !_isTenantLogin;
+                                  return GestureDetector(
                                     onTap: () {
-                                      if (!_isTenantLogin) {
-                                        setState(() => _isTenantLogin = true);
+                                      if (_isTenantLogin != tenant) {
+                                        setState(() => _isTenantLogin = tenant);
                                         hapticFeedback();
                                       }
                                     },
                                     child: Container(
+                                      width: double.infinity,
                                       padding: const EdgeInsets.symmetric(
                                         vertical: 10,
+                                        horizontal: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: _isTenantLogin
-                                            ? const Color(0xFF92C24A)
+                                        color: selected
+                                            ? (tenant
+                                                ? const Color(0xFF92C24A)
+                                                : const Color(0xFFFF9800))
                                             : Colors.transparent,
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Text(
-                                        'Tenant',
+                                        tenant ? 'Tenant' : 'Guest',
                                         textAlign: TextAlign.center,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
-                                          color: _isTenantLogin
+                                          color: selected
                                               ? Colors.black
                                               : Colors.white.withOpacity(0.5),
                                           fontWeight: FontWeight.w600,
-                                          fontSize: 14,
+                                          fontSize:
+                                              constraints.maxWidth < 120 ? 11 : 14,
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      if (_isTenantLogin) {
-                                        setState(() => _isTenantLogin = false);
-                                        hapticFeedback();
-                                      }
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _isTenantLogin
-                                            ? Colors.transparent
-                                            : const Color(0xFFFF9800),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Text(
-                                        'Guest',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: _isTenantLogin
-                                              ? Colors.white.withOpacity(0.5)
-                                              : Colors.black,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                                  );
+                                }
+
+                                final tenantOption = buildRoleOption(tenant: true);
+                                final guestOption = buildRoleOption(tenant: false);
+                                if (constraints.maxWidth < 240) {
+                                  return Column(
+                                    children: [
+                                      tenantOption,
+                                      const SizedBox(height: 4),
+                                      guestOption,
+                                    ],
+                                  );
+                                }
+                                return Row(
+                                  children: [
+                                    Expanded(child: tenantOption),
+                                    const SizedBox(width: 4),
+                                    Expanded(child: guestOption),
+                                  ],
+                                );
+                              },
                             ),
                           ),
 
@@ -738,6 +758,7 @@ class _LoginScreenState extends State<LoginScreen>
             borderRadius: BorderRadius.circular(16),
           ),
           elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
         ),
         onPressed: _isLoading ? null : _handleLogin,
         child: _isLoading
@@ -752,16 +773,22 @@ class _LoginScreenState extends State<LoginScreen>
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    _isTenantLogin ? 'Sign In as Tenant' : 'Sign In as Guest',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black,
-                      letterSpacing: 0.5,
+                  Flexible(
+                    child: Text(
+                      _isTenantLogin ? 'Sign In as Tenant' : 'Sign In as Guest',
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 4),
                   const Icon(
                     Icons.arrow_forward_rounded,
                     color: Colors.black,
@@ -775,7 +802,10 @@ class _LoginScreenState extends State<LoginScreen>
 
   Widget _buildSocialSection() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      padding: EdgeInsets.symmetric(
+        horizontal: MediaQuery.of(context).size.width < 360 ? 8 : 16,
+        vertical: 20,
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -793,37 +823,49 @@ class _LoginScreenState extends State<LoginScreen>
       ),
       child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Divider(
-                  color: Colors.white.withOpacity(0.08),
-                  thickness: 1,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 220;
+              final label = Text(
+                'Connect with Us',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: compact ? 0.2 : 0.8,
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Text(
-                  'Connect with Us',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8,
+              );
+              if (compact) {
+                return Center(child: label);
+              }
+              return Row(
+                children: [
+                  Expanded(
+                    child: Divider(
+                      color: Colors.white.withOpacity(0.08),
+                      thickness: 1,
+                    ),
                   ),
-                ),
-              ),
-              Expanded(
-                child: Divider(
-                  color: Colors.white.withOpacity(0.08),
-                  thickness: 1,
-                ),
-              ),
-            ],
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: label,
+                  ),
+                  Expanded(
+                    child: Divider(
+                      color: Colors.white.withOpacity(0.08),
+                      thickness: 1,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 14,
+            runSpacing: 14,
             children: [
               _buildSocialButton(
                 icon: FontAwesomeIcons.facebookF,
@@ -833,7 +875,6 @@ class _LoginScreenState extends State<LoginScreen>
                   _launchUrl(kFacebookUrl);
                 },
               ),
-              const SizedBox(width: 14),
               _buildSocialButton(
                 icon: FontAwesomeIcons.instagram,
                 color: const Color(0xFFE4405F),
@@ -842,7 +883,6 @@ class _LoginScreenState extends State<LoginScreen>
                   _launchUrl(kInstagramUrl);
                 },
               ),
-              const SizedBox(width: 14),
               _buildSocialButton(
                 icon: FontAwesomeIcons.google,
                 color: const Color(0xFFEA4335),
@@ -851,7 +891,6 @@ class _LoginScreenState extends State<LoginScreen>
                   _launchUrl(kGoogleUrl);
                 },
               ),
-              const SizedBox(width: 14),
               _buildSocialButton(
                 icon: FontAwesomeIcons.whatsapp,
                 color: const Color(0xFF25D366),
