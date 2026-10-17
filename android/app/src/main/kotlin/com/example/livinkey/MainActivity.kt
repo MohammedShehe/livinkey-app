@@ -1,4 +1,4 @@
-package com.example.livinkey
+package com.livinkey.app
 
 import io.flutter.embedding.android.FlutterActivity
 

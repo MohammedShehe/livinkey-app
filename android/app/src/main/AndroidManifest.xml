@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    package="com.example.livinkey">
+    package="com.livinkey.app">
     <application
         android:label="Livinkey"
         android:name="androidx.multidex.MultiDexApplication"
@@ -46,9 +46,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     
     <permission
-        android:name="com.example.livinkey.permission.C2D_MESSAGE"
+        android:name="com.livinkey.app.permission.C2D_MESSAGE"
         android:protectionLevel="signature" />
-    <uses-permission android:name="com.example.livinkey.permission.C2D_MESSAGE" />
+    <uses-permission android:name="com.livinkey.app.permission.C2D_MESSAGE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     
     <queries>

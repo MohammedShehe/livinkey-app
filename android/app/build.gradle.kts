@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.livinkey"
+    namespace = "com.livinkey.app"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -21,7 +21,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.livinkey"
+        applicationId = "com.livinkey.app"
         minSdk = flutter.minSdkVersion
         targetSdk = 34
         versionCode = flutter.versionCode
