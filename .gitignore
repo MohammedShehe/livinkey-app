@@ -119,6 +119,10 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
+# Key files
+android/key.properties
+android/app/upload-keystore.jks
+
 # ============================================================
 # DEPENDENCY LOCK FILES (Optional - keep or ignore)
 # ============================================================
