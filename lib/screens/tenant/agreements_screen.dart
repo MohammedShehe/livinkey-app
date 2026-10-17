@@ -129,10 +129,6 @@ class _AgreementsScreenState extends State<AgreementsScreen> {
                                 _agreement!['values']?['MOBILE_NO']),
                             _detail('Parents no.',
                                 _agreement!['values']?['PARENTS_NO']),
-                            _detail(
-                              'Aadhar/Passport/Visa no.',
-                              _agreement!['values']?['AADHAR_PASSPORT_VISA_NO'],
-                            ),
                             _detail('Gender', _agreement!['values']?['GENDER']),
                             _detail('Nationality',
                                 _agreement!['values']?['NATIONALITY']),
@@ -166,23 +162,6 @@ class _AgreementsScreenState extends State<AgreementsScreen> {
                                     height: 1.45,
                                   ),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            const Text(
-                              'Additional agreement wording',
-                              style: TextStyle(
-                                color: kLivinkeyGreen,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _agreement!['text']?.toString() ?? '',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 14,
-                                height: 1.6,
                               ),
                             ),
                             const SizedBox(height: 20),
