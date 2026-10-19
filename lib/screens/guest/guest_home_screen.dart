@@ -853,7 +853,7 @@ class _NotificationBellState extends State<_NotificationBell> {
             hapticFeedback();
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const NotificationScreen()),
+              MaterialPageRoute(builder: (context) => const NotificationScreen(isTenant: false)),
             ).then((_) => _updateCount());
           },
         ),

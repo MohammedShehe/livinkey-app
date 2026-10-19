@@ -167,10 +167,11 @@ class NotificationService {
 
   Future<void> markAsRead(int id, {bool isTenant = true}) async {
     try {
-      if (isTenant) {
-        await _api.markTenantNotificationRead(id);
-      } else {
-        await _api.markGuestNotificationRead(id);
+      final response = isTenant
+          ? await _api.markTenantNotificationRead(id)
+          : await _api.markGuestNotificationRead(id);
+      if (response['success'] != true) {
+        throw Exception(response['message'] ?? 'Failed to mark notification as read');
       }
 
       final index = _notifications.indexWhere((n) => n.id == id);
@@ -188,10 +189,11 @@ class NotificationService {
 
   Future<void> markAllAsRead({bool isTenant = true}) async {
     try {
-      if (isTenant) {
-        await _api.markAllTenantNotificationsRead();
-      } else {
-        await _api.markAllGuestNotificationsRead();
+      final response = isTenant
+          ? await _api.markAllTenantNotificationsRead()
+          : await _api.markAllGuestNotificationsRead();
+      if (response['success'] != true) {
+        throw Exception(response['message'] ?? 'Failed to mark notifications as read');
       }
 
       _notifications =

@@ -243,6 +243,10 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
+      // Ask the platform password manager to save these credentials after a
+      // successful sign-in. Saved credentials can then be autofilled next time.
+      TextInput.finishAutofillContext(shouldSave: true);
+
       // Save token and user
       await _api.setToken(response.token!, role: response.user!.role);
       await _api.saveUser(response.user!);
@@ -364,7 +368,8 @@ class _LoginScreenState extends State<LoginScreen>
                   scale: _scaleAnimation,
                   child: SlideTransition(
                     position: _slideAnimation,
-                    child: SingleChildScrollView(
+                    child: AutofillGroup(
+                      child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
                       padding: EdgeInsets.symmetric(
                         horizontal: MediaQuery.of(context).size.width < 360 ? 12 : 24,
@@ -532,6 +537,10 @@ class _LoginScreenState extends State<LoginScreen>
                             icon: Icons.email_outlined,
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
+                            autofillHints: const [
+                              AutofillHints.username,
+                              AutofillHints.email,
+                            ],
                           ),
 
                           const SizedBox(height: 18),
@@ -543,6 +552,7 @@ class _LoginScreenState extends State<LoginScreen>
                             icon: Icons.lock_outline,
                             obscureText: _obscurePassword,
                             textInputAction: TextInputAction.done,
+                            autofillHints: const [AutofillHints.password],
                             onSubmitted: (_) => _handleLogin(),
                             suffixIcon: IconButton(
                               icon: Icon(
@@ -635,6 +645,7 @@ class _LoginScreenState extends State<LoginScreen>
                         ],
                       ),
                     ),
+                    ),
                   ),
                 ),
               ),
@@ -652,6 +663,7 @@ class _LoginScreenState extends State<LoginScreen>
     TextInputType keyboardType = TextInputType.text,
     TextInputAction textInputAction = TextInputAction.next,
     bool obscureText = false,
+    Iterable<String>? autofillHints,
     Widget? suffixIcon,
     void Function(String)? onSubmitted,
   }) {
@@ -688,6 +700,7 @@ class _LoginScreenState extends State<LoginScreen>
         keyboardType: keyboardType,
         textInputAction: textInputAction,
         obscureText: obscureText,
+        autofillHints: autofillHints,
         onSubmitted: onSubmitted,
         decoration: InputDecoration(
           labelText: label,

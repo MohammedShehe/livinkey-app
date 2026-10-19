@@ -10,7 +10,10 @@ import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 
 class NotificationScreen extends StatefulWidget {
-  const NotificationScreen({super.key});
+  /// Set false when opened from the guest experience.
+  final bool isTenant;
+
+  const NotificationScreen({super.key, this.isTenant = true});
 
   @override
   State<NotificationScreen> createState() => _NotificationScreenState();
@@ -75,7 +78,7 @@ class _NotificationScreenState extends State<NotificationScreen>
     setState(() => _isLoading = true);
 
     try {
-      await _notificationService.refresh(isTenant: true);
+      await _notificationService.refresh(isTenant: widget.isTenant);
       if (mounted) {
         setState(() {
           _notifications = _notificationService.notifications;
@@ -103,7 +106,7 @@ class _NotificationScreenState extends State<NotificationScreen>
     if (notification.isRead) return;
 
     try {
-      await _notificationService.markAsRead(notification.id, isTenant: true);
+      await _notificationService.markAsRead(notification.id, isTenant: widget.isTenant);
       if (!mounted) return;
       setState(() {
         final index = _notifications.indexWhere((n) => n.id == notification.id);
@@ -122,7 +125,7 @@ class _NotificationScreenState extends State<NotificationScreen>
     if (_notifications.isEmpty) return;
 
     try {
-      await _notificationService.markAllAsRead(isTenant: true);
+      await _notificationService.markAllAsRead(isTenant: widget.isTenant);
       if (!mounted) return;
       setState(() {
         _notifications =
@@ -151,7 +154,7 @@ class _NotificationScreenState extends State<NotificationScreen>
     try {
       await _notificationService.deleteNotification(
         notification.id,
-        isTenant: true,
+        isTenant: widget.isTenant,
       );
       if (!mounted) return;
       SnackbarHelper.show(context, 'Notification dismissed');
