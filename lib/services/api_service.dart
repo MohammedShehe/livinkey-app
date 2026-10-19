@@ -28,8 +28,10 @@ class ApiService {
 
     _dio = Dio(BaseOptions(
       baseUrl: kApiBaseUrl,
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
+      // Slow mobile networks (India 3G/weak Wi‑Fi) often need >30s.
+      connectTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 60),
+      sendTimeout: const Duration(seconds: 60),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -60,19 +62,35 @@ class ApiService {
         return handler.next(response);
       },
       onError: (error, handler) async {
-        if (error.response?.statusCode == 401 || error.response?.statusCode == 403) {
-          // Do NOT clear token when a tenant is browsing guest endpoints.
-          // They still hold a valid tenant token; guest routes may reject it
-          // with 401, but that must not log the tenant out.
+        // ============================================================
+        // SESSION SAFETY:
+        // - Only a true 401 (unauthenticated) on a matching-role route
+        //   may clear the stored session.
+        // - 403 means "forbidden" (permission / resource) — NEVER logout.
+        // - Cross-role calls and FCM device routes must NEVER logout.
+        // Backend JWT is configured for 90 days; the client must not
+        // invent shorter session lifetimes.
+        // ============================================================
+        final status = error.response?.statusCode;
+        if (status == 401) {
           final path = error.requestOptions.path;
+          final role = _role ??
+              (await SharedPreferences.getInstance()).getString(kStorageRole);
           final isGuestPath = path.contains('/guests/');
-          final role = _role ?? (await SharedPreferences.getInstance()).getString(kStorageRole);
-          if (isGuestPath && role == 'tenant') {
-            // Ignore — keep tenant session intact
+          final isTenantPath = path.contains('/tenants/');
+          final isFcmOrDevicePath = path.contains('fcm-token') ||
+              path.contains('/device/');
+
+          final isCrossRole = (isGuestPath && role == 'tenant') ||
+              (isTenantPath && role == 'guest');
+
+          if (isFcmOrDevicePath || isCrossRole) {
+            // Keep session intact
           } else {
             await _handleUnauthorized();
           }
         }
+        // 403: do not clear token
         return handler.next(error);
       },
     ));
@@ -207,6 +225,79 @@ class ApiService {
   }
 
   // ============================================================
+  // NETWORK HELPERS (slow devices / flaky mobile networks)
+  // ============================================================
+
+  /// True for errors that often succeed on a quick retry.
+  static bool _isTransientNetworkError(DioException e) {
+    return e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.unknown;
+  }
+
+  /// User-facing message for Dio failures (login/signup and general API).
+  static String mapDioError(DioException e, {String fallback = 'Something went wrong. Please try again.'}) {
+    // Server returned a body — prefer its message when present
+    final data = e.response?.data;
+    if (data is Map && data['message'] != null) {
+      final m = data['message'].toString().trim();
+      if (m.isNotEmpty) return m;
+    }
+
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return 'The server is taking too long to respond. Please try again.';
+      case DioExceptionType.connectionError:
+        return 'Unable to reach the server. Check your internet connection and try again.';
+      case DioExceptionType.badResponse:
+        final code = e.response?.statusCode;
+        if (code == 502 || code == 503 || code == 504) {
+          return 'Server is temporarily unavailable. Please try again in a moment.';
+        }
+        return fallback;
+      case DioExceptionType.cancel:
+        return 'Request was cancelled.';
+      default:
+        // Includes unknown / SSL / DNS style failures
+        final msg = e.message?.toLowerCase() ?? '';
+        if (msg.contains('socket') ||
+            msg.contains('failed host lookup') ||
+            msg.contains('network is unreachable') ||
+            msg.contains('connection refused') ||
+            msg.contains('connection reset')) {
+          return 'Unable to reach the server. Check your internet connection and try again.';
+        }
+        return fallback;
+    }
+  }
+
+  /// POST with up to [maxAttempts] tries on transient network errors.
+  Future<Response<dynamic>> _postWithRetry(
+    String path, {
+    dynamic data,
+    int maxAttempts = 3,
+  }) async {
+    DioException? lastError;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await _dio.post(path, data: data);
+      } on DioException catch (e) {
+        lastError = e;
+        // Do not retry when the server already answered (4xx/5xx body)
+        if (e.response != null) rethrow;
+        if (!_isTransientNetworkError(e) || attempt == maxAttempts) rethrow;
+        // Brief backoff: 800ms, 1600ms, ...
+        await Future<void>.delayed(Duration(milliseconds: 800 * attempt));
+      }
+    }
+    throw lastError!;
+  }
+
+  // ============================================================
   // TENANT HOME
   // ============================================================
   Future<Map<String, dynamic>> getTenantHome() async {
@@ -224,22 +315,29 @@ class ApiService {
     }
   }
 
-  // Tenant Login
+  // Tenant Login (retries on transient network failures)
   Future<LoginResponse> tenantLogin(String email, String password) async {
     try {
-      final response = await _dio.post('/tenants/auth/login', data: {
+      final response = await _postWithRetry('/tenants/auth/login', data: {
         'email': email,
         'password': password,
       });
-      return LoginResponse.fromJson(response.data);
+      return LoginResponse.fromJson(response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : {'success': false, 'message': 'Invalid server response'});
     } on DioException catch (e) {
       if (e.response != null && e.response!.data != null) {
-        return LoginResponse.fromJson(e.response!.data);
+        try {
+          return LoginResponse.fromJson(
+            e.response!.data is Map
+                ? Map<String, dynamic>.from(e.response!.data as Map)
+                : {'success': false, 'message': mapDioError(e)},
+          );
+        } catch (_) {
+          return LoginResponse(success: false, message: mapDioError(e));
+        }
       }
-      return LoginResponse(
-        success: false,
-        message: 'Network error. Please try again.',
-      );
+      return LoginResponse(success: false, message: mapDioError(e));
     } catch (e) {
       return LoginResponse(
         success: false,
@@ -248,22 +346,29 @@ class ApiService {
     }
   }
 
-  // Guest Login
+  // Guest Login (retries on transient network failures)
   Future<LoginResponse> guestLogin(String email, String password) async {
     try {
-      final response = await _dio.post('/guests/login', data: {
+      final response = await _postWithRetry('/guests/login', data: {
         'email': email,
         'password': password,
       });
-      return LoginResponse.fromJson(response.data);
+      return LoginResponse.fromJson(response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : {'success': false, 'message': 'Invalid server response'});
     } on DioException catch (e) {
       if (e.response != null && e.response!.data != null) {
-        return LoginResponse.fromJson(e.response!.data);
+        try {
+          return LoginResponse.fromJson(
+            e.response!.data is Map
+                ? Map<String, dynamic>.from(e.response!.data as Map)
+                : {'success': false, 'message': mapDioError(e)},
+          );
+        } catch (_) {
+          return LoginResponse(success: false, message: mapDioError(e));
+        }
       }
-      return LoginResponse(
-        success: false,
-        message: 'Network error. Please try again.',
-      );
+      return LoginResponse(success: false, message: mapDioError(e));
     } catch (e) {
       return LoginResponse(
         success: false,
@@ -272,16 +377,19 @@ class ApiService {
     }
   }
 
-  // Guest Register
+  // Guest Register (retries on transient network failures)
   Future<Map<String, dynamic>> guestRegister(Map<String, dynamic> data) async {
     try {
-      final response = await _dio.post('/guests/register', data: data);
-      return response.data;
-    } on DioException catch (e) {
-      if (e.response != null && e.response!.data != null) {
-        return e.response!.data;
+      final response = await _postWithRetry('/guests/register', data: data);
+      if (response.data is Map) {
+        return Map<String, dynamic>.from(response.data as Map);
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'Invalid server response'};
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null && e.response!.data is Map) {
+        return Map<String, dynamic>.from(e.response!.data as Map);
+      }
+      return {'success': false, 'message': mapDioError(e)};
     } catch (e) {
       return {'success': false, 'message': 'An error occurred. Please try again.'};
     }
@@ -509,7 +617,7 @@ class ApiService {
         return e.response!.data;
       }
       if (e.response?.statusCode == 401) {
-        return {'success': false, 'message': 'Session expired. Please login again.'};
+        return {'success': false, 'message': 'Unable to load dashboard. Please try again.'};
       }
       return {'success': false, 'message': 'Network error. Please try again.'};
     } catch (e) {
@@ -1090,8 +1198,11 @@ class ApiService {
         if (statusCode == 400) {
           return {'success': false, 'message': 'Invalid document type or file format.'};
         }
-        if (statusCode == 401 || statusCode == 403) {
-          return {'success': false, 'message': 'Authentication failed. Please login again.'};
+        if (statusCode == 401) {
+          return {'success': false, 'message': 'Authentication failed. Please try again.'};
+        }
+        if (statusCode == 403) {
+          return {'success': false, 'message': 'You do not have permission to download this document.'};
         }
         if (statusCode == 413) {
           return {'success': false, 'message': 'File too large. Please use a smaller image.'};
@@ -1459,17 +1570,27 @@ class ApiService {
   // FCM TOKEN ENDPOINTS (Add to ApiService class)
   // ============================================================
 
-  /// Update FCM token on backend
+  /// Update FCM token on backend (role-aware).
+  /// Tenants → /tenants/device/fcm-token
+  /// Guests  → /guests/device/fcm-token
+  /// Failures here must never log the user out (interceptor protects this).
   Future<Map<String, dynamic>> updateFCMToken(String token) async {
     try {
-      final response = await _dio.post('/tenants/device/fcm-token', data: {
+      final role = _role ??
+          (await SharedPreferences.getInstance()).getString(kStorageRole);
+      final path = (role == 'guest')
+          ? '/guests/device/fcm-token'
+          : '/tenants/device/fcm-token';
+      final response = await _dio.post(path, data: {
         'fcm_token': token,
         'device_type': Platform.isIOS ? 'ios' : 'android',
       });
-      return response.data;
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : {'success': true};
     } on DioException catch (e) {
-      if (e.response != null && e.response!.data != null) {
-        return e.response!.data;
+      if (e.response != null && e.response!.data != null && e.response!.data is Map) {
+        return Map<String, dynamic>.from(e.response!.data as Map);
       }
       return {'success': false, 'message': 'Network error. Please try again.'};
     } catch (e) {
@@ -1477,15 +1598,22 @@ class ApiService {
     }
   }
 
-  /// Remove FCM token on logout
+  /// Remove FCM token on logout (role-aware).
   Future<Map<String, dynamic>> removeFCMToken({String? token}) async {
     try {
+      final role = _role ??
+          (await SharedPreferences.getInstance()).getString(kStorageRole);
+      final path = (role == 'guest')
+          ? '/guests/device/fcm-token'
+          : '/tenants/device/fcm-token';
       final data = token != null ? {'fcm_token': token} : {};
-      final response = await _dio.delete('/tenants/device/fcm-token', data: data);
-      return response.data;
+      final response = await _dio.delete(path, data: data);
+      return response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : {'success': true};
     } on DioException catch (e) {
-      if (e.response != null && e.response!.data != null) {
-        return e.response!.data;
+      if (e.response != null && e.response!.data != null && e.response!.data is Map) {
+        return Map<String, dynamic>.from(e.response!.data as Map);
       }
       return {'success': false, 'message': 'Network error. Please try again.'};
     } catch (e) {

@@ -6,10 +6,23 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../common/snackbar_helper.dart';
+import '../../services/api_service.dart';
+import '../../services/push_notification_service.dart';
 import '../../screens/auth/login_screen.dart';
 
 class GuestDrawer extends StatelessWidget {
-  const GuestDrawer({super.key});
+  final int selectedIndex;
+  final bool isTenantGuest;
+  final VoidCallback? onReturnToTenant;
+  final ValueChanged<int>? onNavigateToTab;
+
+  const GuestDrawer({
+    super.key,
+    this.selectedIndex = 0,
+    this.isTenantGuest = false,
+    this.onReturnToTenant,
+    this.onNavigateToTab,
+  });
 
   double _getLogoSize(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
@@ -45,18 +58,42 @@ class GuestDrawer extends StatelessWidget {
                         _buildDrawerItem(
                           icon: Icons.home_rounded,
                           title: 'Home',
-                          onTap: () => Navigator.pop(context),
+                          isActive: selectedIndex == 0,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onNavigateToTab?.call(0);
+                          },
                         ),
                         _buildDrawerItem(
                           icon: Icons.search_rounded,
                           title: 'Search PGs',
-                          onTap: () => Navigator.pop(context),
+                          isActive: selectedIndex == 1,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onNavigateToTab?.call(1);
+                          },
                         ),
                         _buildDrawerItem(
                           icon: Icons.person_rounded,
                           title: 'Profile',
-                          onTap: () => Navigator.pop(context),
+                          isActive: selectedIndex == 2,
+                          onTap: () {
+                            Navigator.pop(context);
+                            onNavigateToTab?.call(2);
+                          },
                         ),
+                        if (isTenantGuest) ...[
+                          const Divider(color: Colors.white24, height: 24),
+                          _buildDrawerItem(
+                            icon: Icons.switch_account_rounded,
+                            title: 'Return to Tenant',
+                            color: kLivinkeyGreen,
+                            onTap: () {
+                              Navigator.pop(context);
+                              onReturnToTenant?.call();
+                            },
+                          ),
+                        ],
                         const Divider(color: Colors.white24, height: 24),
                         _buildDrawerItem(
                           icon: Icons.description_rounded,
@@ -128,22 +165,32 @@ class GuestDrawer extends StatelessWidget {
     required String title,
     required VoidCallback onTap,
     Color? color,
+    bool isActive = false,
   }) {
-    final iconColor = color ?? Colors.white.withOpacity(0.6);
+    final activeColor = const Color(0xFFFF9800);
+    final iconColor = color ?? (isActive ? activeColor : Colors.white.withOpacity(0.6));
+    final textColor = color ?? (isActive ? activeColor : Colors.white.withOpacity(0.8));
     return ListTile(
+      selected: isActive,
+      selectedTileColor: activeColor.withOpacity(0.12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       leading: Icon(icon, color: iconColor, size: 22),
       title: Text(
         title,
         style: TextStyle(
-          color: color ?? Colors.white.withOpacity(0.8),
+          color: textColor,
           fontSize: 15,
-          fontWeight: FontWeight.w500,
+          fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
         ),
       ),
-      trailing: Icon(Icons.chevron_right_rounded, color: Colors.white.withOpacity(0.2), size: 20),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        color: isActive ? activeColor.withOpacity(0.7) : Colors.white.withOpacity(0.2),
+        size: 20,
+      ),
       onTap: onTap,
-      hoverColor: const Color(0xFFFF9800).withOpacity(0.05),
-      splashColor: const Color(0xFFFF9800).withOpacity(0.1),
+      hoverColor: activeColor.withOpacity(0.05),
+      splashColor: activeColor.withOpacity(0.1),
     );
   }
 
@@ -323,12 +370,18 @@ class GuestDrawer extends StatelessWidget {
             child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.5), fontWeight: FontWeight.w600)),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
-              SnackbarHelper.showSuccess(context, 'Logged out successfully');
+              try {
+                await PushNotificationService().removeToken();
+              } catch (_) {}
+              await ApiService().clearToken();
+              if (context.mounted) {
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
+                SnackbarHelper.showSuccess(context, 'Logged out successfully');
+              }
             },
             child: const Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
           ),

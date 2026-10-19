@@ -382,9 +382,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         child: TextButton.icon(
                           onPressed: () {
                             hapticFeedback();
-                            Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const GuestScreen()),
-                            );
+                            GuestScreen.openAsTenantGuest(context);
                           },
                           icon: Icon(Icons.switch_account_rounded, color: kLivinkeyGreen, size: 20),
                           label: Text(

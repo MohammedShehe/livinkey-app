@@ -465,6 +465,7 @@ class _SignUpScreenState extends State<SignUpScreen>
     setState(() => _isLoading = true);
 
     try {
+      await _api.init();
       final response = await _api.guestRegister({
         'full_name': _fullNameController.text.trim(),
         'email': _emailController.text.trim(),

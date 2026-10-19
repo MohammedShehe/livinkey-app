@@ -16,7 +16,22 @@ import '../tenant/tenant_screen.dart';
 import '../../widgets/common/snackbar_helper.dart';
 
 class GuestScreen extends StatefulWidget {
-  const GuestScreen({super.key});
+  /// True when a logged-in tenant opened guest mode (drawer / profile / quick action).
+  /// Passed explicitly so back-button and UI work immediately (no async race).
+  final bool isTenantGuest;
+
+  const GuestScreen({super.key, this.isTenantGuest = false});
+
+  /// Single entry point for "Enter as Guest" from tenant UI.
+  /// Uses a named route so repeated enters cannot stack broken guest screens.
+  static Future<void> openAsTenantGuest(BuildContext context) {
+    return Navigator.of(context).push(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: '/guest-mode'),
+        builder: (_) => const GuestScreen(isTenantGuest: true),
+      ),
+    );
+  }
 
   @override
   State<GuestScreen> createState() => GuestScreenState();
@@ -29,7 +44,7 @@ class GuestScreenState extends State<GuestScreen> {
   final NotificationService _notificationService = NotificationService();
   final ApiService _api = ApiService();
   int _unreadCount = 0;
-  bool _isTenantViewingAsGuest = false;
+  late bool _isTenantViewingAsGuest;
 
   static const List<Widget> _screens = [
     GuestHomeScreen(),
@@ -40,6 +55,9 @@ class GuestScreenState extends State<GuestScreen> {
   @override
   void initState() {
     super.initState();
+    // Synchronous: trust the navigation flag immediately so back / FAB are correct
+    // on the first frame (fixes multi switch + wrong back dialog).
+    _isTenantViewingAsGuest = widget.isTenantGuest;
     _pageController = PageController(initialPage: 0);
     _notificationService.initialize(isTenant: false);
     _updateUnreadCount();
@@ -58,24 +76,35 @@ class GuestScreenState extends State<GuestScreen> {
       final role = await _api.getStoredRole();
       if (mounted) {
         setState(() {
-          _isTenantViewingAsGuest = role == 'tenant';
+          _isTenantViewingAsGuest = widget.isTenantGuest || role == 'tenant';
         });
       }
     } catch (_) {
-      // Ignore – treat as pure guest
+      // Keep widget.isTenantGuest value
     }
   }
 
   void _returnToTenant() {
     HapticFeedback.mediumImpact();
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-      SnackbarHelper.showInfo(context, 'Welcome back to your tenant dashboard');
+    // Capture messenger before popping (this route may dispose).
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final nav = Navigator.of(context);
+    if (nav.canPop()) {
+      // Pop every guest-mode route so multiple "Enter as Guest" pushes
+      // always land back on the tenant dashboard, not another guest layer.
+      nav.popUntil((route) => route.settings.name != '/guest-mode');
     } else {
-      Navigator.of(context).pushReplacement(
+      nav.pushReplacement(
         MaterialPageRoute(builder: (_) => const TenantScreen()),
       );
     }
+    messenger?.showSnackBar(
+      const SnackBar(
+        content: Text('Welcome back to your tenant dashboard'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -468,7 +497,12 @@ class GuestScreenState extends State<GuestScreen> {
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: kLivinkeyBlack,
-        drawer: const GuestDrawer(),
+        drawer: GuestDrawer(
+        selectedIndex: _selectedIndex,
+        isTenantGuest: _isTenantViewingAsGuest,
+        onReturnToTenant: _returnToTenant,
+        onNavigateToTab: navigateToTab,
+      ),
         extendBody: true,
         body: Stack(
           children: [

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../widgets/common/snackbar_helper.dart';
 import '../../models/auth_models.dart';          // ← single source of NotificationModel
@@ -174,6 +175,13 @@ class _NotificationScreenState extends State<NotificationScreen>
 
     if (!notification.isRead) {
       _markAsRead(notification);
+    }
+
+    final attachedLink = notification.link?.trim();
+    if (attachedLink != null &&
+        (attachedLink.startsWith('https://') || attachedLink.startsWith('http://'))) {
+      launchUrl(Uri.parse(attachedLink), mode: LaunchMode.externalApplication);
+      return;
     }
 
     switch (type) {

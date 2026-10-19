@@ -191,6 +191,9 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = true);
 
     try {
+      // Ensure Dio is ready (important on slow first launches)
+      await _api.init();
+
       LoginResponse response;
 
       if (_isTenantLogin) {

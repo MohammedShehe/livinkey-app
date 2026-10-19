@@ -99,10 +99,24 @@ class SnackbarHelper {
   /// Converts occasional technical / backend messages into user-friendly text.
   static String _toFriendlyMessage(String message) {
     final lower = message.toLowerCase();
-    if (lower.contains('socket') || lower.contains('connection') || lower.contains('network') || lower.contains('timeout')) {
-      return 'Unable to connect. Please check your internet and try again.';
+    if (lower.contains('taking too long') || lower.contains('timeout')) {
+      return 'The server is taking too long to respond. Please try again.';
     }
-    if (lower.contains('unauthorized') || lower.contains('401') || lower.contains('token')) {
+    if (lower.contains('socket') ||
+        lower.contains('connection') ||
+        lower.contains('network') ||
+        lower.contains('unreachable') ||
+        lower.contains('failed host lookup')) {
+      return 'Unable to reach the server. Check your internet connection and try again.';
+    }
+    // Only map clear authentication failures — not every message that
+    // happens to mention the word "token" (e.g. FCM token errors).
+    if (lower.contains('unauthorized') ||
+        lower.contains('401') ||
+        lower.contains('session expired') ||
+        lower.contains('invalid token') ||
+        lower.contains('jwt expired') ||
+        lower.contains('token expired')) {
       return 'Your session has expired. Please log in again.';
     }
     if (lower.contains('server') || lower.contains('500') || lower.contains('internal')) {

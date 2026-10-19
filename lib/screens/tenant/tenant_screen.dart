@@ -329,9 +329,7 @@ class TenantScreenState extends State<TenantScreen> with WidgetsBindingObserver 
               label: 'Enter as Guest',
               onTap: () {
                 Navigator.pop(context);
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const GuestScreen()),
-                );
+                GuestScreen.openAsTenantGuest(context);
               },
             ),
             _buildQuickActionItem(
@@ -602,7 +600,7 @@ class TenantScreenState extends State<TenantScreen> with WidgetsBindingObserver 
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: kLivinkeyBlack,
-        drawer: const TenantDrawer(),
+        drawer: TenantDrawer(selectedIndex: _selectedIndex),
         extendBody: true,
         body: Stack(
           children: [

@@ -134,9 +134,19 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
           });
         }
       } else {
+        // Prefer local cached user over scary "session expired" toasts.
+        // A single profile API glitch must not look like a forced logout when
+        // the rest of the app still works with a valid token.
+        final rawMsg = response['message']?.toString();
+        final looksLikeAuth = rawMsg != null &&
+            (rawMsg.toLowerCase().contains('session') ||
+                rawMsg.toLowerCase().contains('expired') ||
+                rawMsg.toLowerCase().contains('unauthorized') ||
+                rawMsg.toLowerCase().contains('token') ||
+                rawMsg.toLowerCase().contains('login again'));
         await _loadFromLocalUser(
           isTenantViewingAsGuest: false,
-          errorMessage: response['message'],
+          errorMessage: looksLikeAuth ? null : rawMsg,
         );
       }
     } catch (e) {
