@@ -882,7 +882,9 @@ class _TenantAdsCarouselState extends State<_TenantAdsCarousel> {
     return Column(
       children: [
         SizedBox(
-          height: 225,
+          height: (MediaQuery.sizeOf(context).width * 0.68)
+              .clamp(205.0, 320.0)
+              .toDouble(),
           child: PageView.builder(
             controller: _controller,
             itemCount: slides.length,
@@ -946,109 +948,136 @@ class _TenantAdSlideCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(right: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: LinearGradient(
-            colors: [
-              Colors.white.withOpacity(.08),
-              Colors.white.withOpacity(.025),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          border: Border.all(color: kLivinkeyGreen.withOpacity(.22)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.network(
-              slide.imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                color: Colors.white.withOpacity(.04),
-                child: const Icon(
-                  Icons.image_not_supported_outlined,
-                  color: Colors.white38,
-                  size: 48,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Keep the complete uploaded artwork visible, including on narrow phones.
+        final availableWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        final imageHeight = (availableWidth * 0.52).clamp(125.0, 235.0).toDouble();
+
+        return GestureDetector(
+          onTap: onTap,
+          child: Container(
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF101A17),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: kLivinkeyGreen.withOpacity(.28)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(.12),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-              ),
-              loadingBuilder: (context, child, progress) => progress == null
-                  ? child
-                  : const Center(
-                      child: CircularProgressIndicator(color: kLivinkeyGreen),
-                    ),
+              ],
             ),
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withOpacity(.84),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: imageHeight,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // A neutral background fills any letterboxing without cropping the ad.
+                      const ColoredBox(color: Color(0xFF0B100E)),
+                      Image.network(
+                        slide.imageUrl,
+                        fit: BoxFit.contain,
+                        alignment: Alignment.center,
+                        filterQuality: FilterQuality.medium,
+                        errorBuilder: (_, __, ___) => ColoredBox(
+                          color: Colors.white.withOpacity(.04),
+                          child: const Center(
+                            child: Icon(
+                              Icons.image_not_supported_outlined,
+                              color: Colors.white38,
+                              size: 42,
+                            ),
+                          ),
+                        ),
+                        loadingBuilder: (context, child, progress) =>
+                            progress == null
+                                ? child
+                                : const Center(
+                                    child: CircularProgressIndicator(
+                                      color: kLivinkeyGreen,
+                                    ),
+                                  ),
+                      ),
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(.68),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            '${position + 1}/$total',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ),
-            ),
-            Positioned(
-              left: 18,
-              right: 18,
-              bottom: 16,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      slide.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                if (slide.title.trim().isNotEmpty || slide.linkUrl.isNotEmpty)
+                  Container(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF15211C),
+                      border: Border(
+                        top: BorderSide(
+                          color: kLivinkeyGreen.withOpacity(.18),
+                        ),
                       ),
                     ),
-                  ),
-                  if (slide.linkUrl.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    Icon(
-                      Icons.open_in_new_rounded,
-                      color: Colors.white.withOpacity(0.85),
-                      size: 18,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            slide.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              height: 1.25,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (slide.linkUrl.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.open_in_new_rounded,
+                            color: kLivinkeyGreen.withOpacity(.95),
+                            size: 18,
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
-                ],
-              ),
-            ),
-            Positioned(
-              top: 12,
-              right: 12,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(.55),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '${position + 1}/$total',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
                   ),
-                ),
-              ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
