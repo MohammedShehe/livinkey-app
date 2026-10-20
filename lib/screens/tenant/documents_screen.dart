@@ -500,7 +500,15 @@ class _DocumentsScreenState extends State<DocumentsScreen>
 
   void _showDocumentPreview(Map<String, dynamic> doc) {
     final docType = doc['document_type']?.toString().replaceAll('_', ' ').toUpperCase() ?? 'Document';
-    final docUrl = doc['document_url'];
+    final docUrl = doc['document_url']?.toString();
+    final lowerUrl = (docUrl ?? '').toLowerCase();
+    final mime = (doc['mime_type'] ?? doc['file_type'] ?? '').toString().toLowerCase();
+    final isPdf = lowerUrl.contains('.pdf') ||
+        lowerUrl.contains('application/pdf') ||
+        lowerUrl.contains('/raw/') ||
+        mime.contains('pdf') ||
+        (doc['document_type']?.toString() == 'agreement' &&
+            !RegExp(r'\.(jpg|jpeg|png|gif|webp|bmp)(\?|$)', caseSensitive: false).hasMatch(lowerUrl));
     
     showDialog(
       context: context,
@@ -544,7 +552,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: kLivinkeyGreen.withOpacity(0.14)),
                 ),
-                child: docUrl != null && docUrl.isNotEmpty
+                child: docUrl != null && docUrl.isNotEmpty && !isPdf
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(16),
                         child: Image.network(
@@ -555,10 +563,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Text(
-                                    '📄',
-                                    style: TextStyle(fontSize: 60, color: kLivinkeyGreen.withOpacity(0.4)),
-                                  ),
+                                  Icon(Icons.picture_as_pdf_rounded, size: 56, color: kLivinkeyGreen.withOpacity(0.55)),
                                   const SizedBox(height: 8),
                                   Text(
                                     'Preview not available',
@@ -574,13 +579,19 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              '📄',
-                              style: TextStyle(fontSize: 60, color: kLivinkeyGreen.withOpacity(0.4)),
+                            Icon(
+                              isPdf ? Icons.picture_as_pdf_rounded : Icons.insert_drive_file_rounded,
+                              size: 56,
+                              color: kLivinkeyGreen.withOpacity(0.55),
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'No document URL',
+                              isPdf
+                                  ? 'PDF document — use Download to view'
+                                  : (docUrl != null && docUrl.isNotEmpty
+                                      ? 'Preview not available'
+                                      : 'No document URL'),
+                              textAlign: TextAlign.center,
                               style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12),
                             ),
                           ],
