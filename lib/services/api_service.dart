@@ -584,6 +584,20 @@ class ApiService {
     }
   }
 
+  /// Returns a browser-openable URL for the tenant's accepted agreement PDF.
+  Future<Map<String, dynamic>> getTenantAgreementPdfUrl() async {
+    try {
+      final token = await getToken();
+      if (token == null || token.isEmpty) {
+        return {'success': false, 'message': 'Please login again.'};
+      }
+      final url = '$kApiBaseUrl/tenants/agreement/pdf?token=${Uri.encodeComponent(token)}';
+      return {'success': true, 'url': url};
+    } catch (e) {
+      return {'success': false, 'message': 'Unable to prepare agreement download.'};
+    }
+  }
+
   Future<Map<String, dynamic>> getTenantProfile() async {
     try {
       final response = await _dio.get('/tenants/profile');

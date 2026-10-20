@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../utils/constants.dart';
 import '../../services/api_service.dart';
 
@@ -52,6 +53,26 @@ class _AgreementsScreenState extends State<AgreementsScreen> {
     }
   }
 
+  Future<void> _downloadPdf() async {
+    final res = await _api.getTenantAgreementPdfUrl();
+    if (!mounted) return;
+    if (res['success'] != true || res['url'] == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['message']?.toString() ?? 'Unable to download agreement PDF.')));
+      return;
+    }
+    try {
+      final uri = Uri.parse(res['url'].toString());
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open agreement PDF.')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open agreement PDF.')));
+      }
+    }
+  }
+
   @override void initState() { super.initState(); _load(); }
   Future<void> _load() async {
     final res = await _api.getTenantAgreement();
@@ -64,7 +85,19 @@ class _AgreementsScreenState extends State<AgreementsScreen> {
   @override Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kLivinkeyBlack,
-      appBar: AppBar(backgroundColor: kLivinkeyBlack, foregroundColor: Colors.white, title: const Text('Agreements', style: TextStyle(fontWeight: FontWeight.w700))),
+      appBar: AppBar(
+        backgroundColor: kLivinkeyBlack,
+        foregroundColor: Colors.white,
+        title: const Text('Agreements', style: TextStyle(fontWeight: FontWeight.w700)),
+        actions: [
+          if (_agreement != null && _agreement!['accepted'] == true)
+            IconButton(
+              tooltip: 'Download agreement PDF',
+              icon: const Icon(Icons.download_rounded, color: kLivinkeyGreen),
+              onPressed: _downloadPdf,
+            ),
+        ],
+      ),
       body: _loading
           ? const Center(
               child: CircularProgressIndicator(color: kLivinkeyGreen),
@@ -165,26 +198,43 @@ class _AgreementsScreenState extends State<AgreementsScreen> {
                               ),
                             ),
                             const SizedBox(height: 20),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: (_agreement!['accepted'] == true
-                                        ? kLivinkeyGreen
-                                        : Colors.orange)
-                                    .withOpacity(.12),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                _agreement!['accepted'] == true
-                                    ? 'Accepted'
-                                    : 'Acceptance required',
-                                style: TextStyle(
-                                  color: _agreement!['accepted'] == true
-                                      ? kLivinkeyGreen
-                                      : Colors.orange,
-                                  fontWeight: FontWeight.w700,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: (_agreement!['accepted'] == true
+                                              ? kLivinkeyGreen
+                                              : Colors.orange)
+                                          .withOpacity(.12),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      _agreement!['accepted'] == true
+                                          ? 'Accepted'
+                                          : 'Acceptance required',
+                                      style: TextStyle(
+                                        color: _agreement!['accepted'] == true
+                                            ? kLivinkeyGreen
+                                            : Colors.orange,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                if (_agreement!['accepted'] == true) ...[
+                                  const SizedBox(width: 10),
+                                  IconButton(
+                                    tooltip: 'Download agreement as PDF',
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: kLivinkeyGreen.withOpacity(.15),
+                                    ),
+                                    icon: const Icon(Icons.picture_as_pdf_rounded, color: kLivinkeyGreen),
+                                    onPressed: _downloadPdf,
+                                  ),
+                                ],
+                              ],
                             ),
                             if (_agreement!['accepted'] != true) ...[
                               const SizedBox(height: 12),

@@ -1,7 +1,7 @@
 name: livinkey
 description: PG Management App for India
 publish_to: 'none'
-version: 1.0.0+3
+version: 1.0.0+4
 
 environment:
   sdk: ^3.10.4
@@ -15,6 +15,7 @@ dependencies:
   url_launcher: ^6.2.0
   audioplayers: ^5.2.1
   image_picker: ^1.0.4
+  file_picker: ^8.0.0
   dio: ^5.4.0
   shared_preferences: ^2.2.2
   intl: ^0.18.1

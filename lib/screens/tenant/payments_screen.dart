@@ -432,6 +432,34 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                   status == 'paid' ? kLivinkeyGreen : (status == 'partially_paid' ? Colors.orange : Colors.white)),
             ],
           ),
+          if (hasBill && (_currentBill!.otherCharges > 0 || (_currentBill!.otherChargesNote?.isNotEmpty == true))) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.06)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Other charges: ${fmtINR(_currentBill!.otherCharges)}',
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                  if (_currentBill!.otherChargesNote?.isNotEmpty == true) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      _currentBill!.otherChargesNote!,
+                      style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 12.5, height: 1.35),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           if (hasBill && _currentBill!.billingMonth?.isNotEmpty == true) ...[
             const SizedBox(height: 12),
             Row(

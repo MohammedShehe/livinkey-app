@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../utils/constants.dart';
@@ -171,6 +172,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
         {'label': 'C-Form', 'key': 'c_form', 'required': true},
         {'label': 'E-FRRO', 'key': 'efrro', 'required': true},
         {'label': 'University ID', 'key': 'university_id', 'required': false},
+        {'label': 'Agreement', 'key': 'agreement', 'required': true},
       ];
     } else {
       return [
@@ -179,6 +181,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
         {'label': 'Tenant Aadhaar Card', 'key': 'tenant_aadhaar', 'required': true},
         {'label': 'Parent Aadhaar Card', 'key': 'parent_aadhaar', 'required': true},
         {'label': 'University ID', 'key': 'university_id', 'required': false},
+        {'label': 'Agreement', 'key': 'agreement', 'required': true},
       ];
     }
   }
@@ -262,7 +265,62 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     setState(() => _selectedIndices.clear());
   }
 
+
+  Future<void> _uploadAgreementPdf(Map<String, dynamic> doc) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        withData: kIsWeb,
+      );
+      if (result == null || result.files.isEmpty || !mounted) return;
+      final file = result.files.first;
+      setState(() => _isUploading = true);
+      String fileData;
+      if (kIsWeb) {
+        if (file.bytes == null) {
+          if (mounted) SnackbarHelper.showError(context, 'Could not read PDF file');
+          setState(() => _isUploading = false);
+          return;
+        }
+        fileData = 'data:application/pdf;base64,${base64Encode(file.bytes!)}';
+      } else {
+        if (file.path == null || file.path!.isEmpty) {
+          if (mounted) SnackbarHelper.showError(context, 'Could not read PDF path');
+          setState(() => _isUploading = false);
+          return;
+        }
+        fileData = file.path!;
+      }
+      final response = await _api.uploadDocument(
+        documentType: doc['key'],
+        filePath: fileData,
+      );
+      if (!mounted) {
+        setState(() => _isUploading = false);
+        return;
+      }
+      if (response['success'] == true) {
+        SnackbarHelper.showSuccess(context, '${doc['label']} uploaded successfully!');
+        await _loadDocuments();
+      } else {
+        SnackbarHelper.showError(context, response['message']?.toString() ?? 'Upload failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        SnackbarHelper.showError(context, 'Failed to upload agreement PDF');
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
   Future<void> _showUploadDialog(Map<String, dynamic> doc) async {
+    final isAgreement = (doc['key']?.toString() == 'agreement');
+    if (isAgreement) {
+      await _uploadAgreementPdf(doc);
+      return;
+    }
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: const Color(0xFF141414),
@@ -1070,6 +1128,8 @@ class _DocumentsScreenState extends State<DocumentsScreen>
       case 'c_form':
         return '📋';
       case 'efrro':
+        return '📄';
+      case 'agreement':
         return '📄';
       case 'university_id':
         return '🎓';

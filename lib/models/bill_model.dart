@@ -10,6 +10,7 @@ class BillModel {
   final double electricityAmount;
   final double maintenanceAmount;
   final double otherCharges;
+  final String? otherChargesNote;
   final double totalAmount;
   final double paidAmount;
   final double fineAmount;
@@ -50,6 +51,7 @@ class BillModel {
     required this.electricityAmount,
     required this.maintenanceAmount,
     required this.otherCharges,
+    this.otherChargesNote,
     required this.totalAmount,
     required this.paidAmount,
     required this.fineAmount,
@@ -129,6 +131,7 @@ class BillModel {
       electricityAmount: _toDouble(json['electricity_amount']),
       maintenanceAmount: _toDouble(json['maintenance_amount']),
       otherCharges: _toDouble(json['other_charges']),
+      otherChargesNote: json['other_charges_note']?.toString(),
       totalAmount: _toDouble(json['total_amount']),
       paidAmount: _toDouble(json['paid_amount']),
       fineAmount: _toDouble(json['fine_amount']),
