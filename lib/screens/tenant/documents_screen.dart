@@ -839,15 +839,53 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                 : const Text('Documents', key: ValueKey('default-title')),
           ),
           actions: [
-            if (_isSelectionMode)
+            if (_isSelectionMode) ...[
+              IconButton(
+                tooltip: 'Download selected',
+                icon: _isDownloadingSelected
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(kLivinkeyGreen),
+                        ),
+                      )
+                    : Icon(
+                        Icons.download_rounded,
+                        color: Colors.white.withOpacity(0.9),
+                      ),
+                onPressed: _isDownloadingSelected ? null : _handleDownloadSelected,
+              ),
               IconButton(
                 icon: Icon(
-                  _selectedIndices.length == _docs.length ? Icons.deselect_rounded : Icons.select_all_rounded,
+                  _selectedIndices.length == _docs.length
+                      ? Icons.deselect_rounded
+                      : Icons.select_all_rounded,
                   color: Colors.white.withOpacity(0.8),
                 ),
                 onPressed: _toggleSelectAll,
               ),
-            if (!_isSelectionMode)
+            ],
+            if (!_isSelectionMode) ...[
+              if (_uploadedDocuments.isNotEmpty)
+                IconButton(
+                  tooltip: 'Download all as ZIP',
+                  icon: _isDownloadingAll
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(kLivinkeyGreen),
+                          ),
+                        )
+                      : Icon(
+                          Icons.download_rounded,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                  onPressed: _isDownloadingAll ? null : _handleDownloadAll,
+                ),
               IconButton(
                 icon: Icon(
                   Icons.cloud_upload_rounded,
@@ -862,6 +900,7 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                   }
                 },
               ),
+            ],
           ],
         ),
         body: _buildMainContent(bottomSafeArea, navBarClearance),
@@ -975,8 +1014,8 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                         Expanded(
                           child: Text(
                             _isSelectionMode
-                                ? 'Tap documents to add or remove them from your selection'
-                                : 'Tap to upload if missing · Tap to view if uploaded',
+                                ? 'Tap to select · use ↓ in the app bar to download selected as ZIP'
+                                : 'Tap to upload/view · long-press to select · ↓ downloads all as ZIP',
                             style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 13),
                           ),
                         ),
