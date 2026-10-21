@@ -1,11 +1,20 @@
 Livinkey app fixes
 
-Changes:
-1. Shared notification screen now accepts an isTenant flag. Guest home opens it with isTenant=false, so guest mark-read, mark-all-read, refresh, and delete operations use /guest-notifications instead of /tenant-notifications.
-2. NotificationService now checks API success responses for mark-as-read and mark-all-read. API failures are surfaced to the UI rather than silently treated as success.
-3. Login fields use platform autofill hints inside AutofillGroup. After successful authentication, Flutter finishes the autofill context with shouldSave=true so supported Android/iOS password managers can offer to save and later autofill credentials.
+Changes (this update):
+1. Agreement document upload is now image-based (camera/gallery), same as passport, signature, Aadhaar, etc. Removed PDF-only FilePicker path for agreement so it matches other document types in Documents Management.
+2. Tenant Documents Management: bulk download (Download All / Download Selected) now requests a ZIP from the backend endpoint POST /documents/my-documents/download (ownership-checked). Zip is saved to temp storage and opened via open_filex. Web falls back to sequential open.
+3. App version (from package_info_plus / pubspec version) is shown on Tenant Profile and Guest Profile screens as "Version x.y.z+build".
+
+New dependencies (run flutter pub get):
+- path_provider
+- package_info_plus
+- open_filex
+
+Backend companion changes:
+- tenant.document.controller: downloadMyDocumentsBulk
+- tenant.document.routes: POST /my-documents/download (tenant auth)
 
 Notes:
-- No credentials are stored by the app itself; saving is handled by the user's OS/password manager.
-- Backend routes and DB schema did not require changes for these client-side issues.
-- Flutter SDK was not available in this environment, so `flutter analyze`, `dart format`, and device builds could not be run. Please run these locally and test guest notifications against the deployed API.
+- Electronic agreement acceptance + generated PDF download (Agreements screen) is unchanged; only the uploaded "Agreement" document type is now image-based.
+- Legacy agreement PDFs already in Cloudinary still preview as PDF icon; new uploads are images.
+- Flutter SDK was not available in this environment; run `flutter pub get` and test locally.

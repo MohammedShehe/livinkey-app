@@ -1284,6 +1284,75 @@ class ApiService {
     }
   }
 
+  /// Bulk download the authenticated tenant's documents as a ZIP.
+  /// Pass [documentIds] to download a subset; omit/empty for all uploaded docs.
+  /// Returns { success, bytes (Uint8List), filename } or error map.
+  Future<Map<String, dynamic>> downloadMyDocumentsBulk({
+    List<dynamic>? documentIds,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/documents/my-documents/download',
+        data: {
+          if (documentIds != null && documentIds.isNotEmpty)
+            'documentIds': documentIds,
+        },
+        options: Options(
+          responseType: ResponseType.bytes,
+          followRedirects: false,
+          validateStatus: (status) =>
+              status != null && status >= 200 && status < 400,
+        ),
+      );
+
+      final bytes = response.data;
+      if (bytes is! List<int> && bytes is! Uint8List) {
+        return {'success': false, 'message': 'Invalid zip response from server'};
+      }
+      final list = bytes is Uint8List ? bytes : Uint8List.fromList(bytes as List<int>);
+      final disposition = response.headers.value('content-disposition') ?? '';
+      String filename = 'my_documents.zip';
+      final match = RegExp(r'filename="?([^";]+)"?').firstMatch(disposition);
+      if (match != null) filename = match.group(1) ?? filename;
+
+      return {
+        'success': true,
+        'bytes': list,
+        'filename': filename,
+      };
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        // When responseType is bytes, error body may still be bytes
+        try {
+          if (e.response!.data is Map) {
+            return Map<String, dynamic>.from(e.response!.data as Map);
+          }
+          if (e.response!.data is List<int>) {
+            final decoded = utf8.decode(e.response!.data as List<int>);
+            final map = jsonDecode(decoded);
+            if (map is Map) return Map<String, dynamic>.from(map);
+          }
+        } catch (_) {}
+      }
+      final status = e.response?.statusCode;
+      if (status == 403) {
+        return {
+          'success': false,
+          'message': 'Unauthorized: You can only download your own documents'
+        };
+      }
+      if (status == 400) {
+        return {'success': false, 'message': 'No documents available to download'};
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'An error occurred. Please try again.'
+      };
+    }
+  }
+
   // ============ NOTIFICATIONS ============
 
   Future<Map<String, dynamic>> getTenantNotifications({int limit = 50, int offset = 0}) async {

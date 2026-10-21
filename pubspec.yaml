@@ -19,13 +19,16 @@ dependencies:
   dio: ^5.4.0
   shared_preferences: ^2.2.2
   intl: ^0.18.1
+  path_provider: ^2.1.2
+  package_info_plus: ^8.0.0
+  open_filex: ^4.5.0
   
   # NEW: Firebase Push Notification Dependencies
   firebase_core: ^4.15.0
   firebase_messaging: ^16.7.0
   flutter_local_notifications: ^17.0.0
   app_badge_plus: ^1.1.4
-  
+ 
 dev_dependencies:
   flutter_test:
     sdk: flutter

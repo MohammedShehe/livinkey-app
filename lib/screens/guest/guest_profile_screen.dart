@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
@@ -34,6 +35,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
   bool _isLoading = true;
   bool _isRefreshing = false;
   bool _isTenantViewingAsGuest = false;
+  String _appVersion = '';
 
   final ApiService _api = ApiService();
 
@@ -42,6 +44,19 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
   // ============================================================
   String _getString(String key, {String defaultValue = ''}) {
     return _profileData[key]?.toString() ?? defaultValue;
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = '${info.version}+${info.buildNumber}';
+        });
+      }
+    } catch (_) {
+      // ignore
+    }
   }
 
   @override
@@ -68,6 +83,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
       _fadeController.forward();
       _slideController.forward();
       _loadProfile();
+      _loadAppVersion();
     });
   }
 
@@ -1068,6 +1084,20 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
                       ),
                     ),
                   ),
+
+                  if (_appVersion.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    Center(
+                      child: Text(
+                        'Version $_appVersion',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.35),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 16),
                 ],

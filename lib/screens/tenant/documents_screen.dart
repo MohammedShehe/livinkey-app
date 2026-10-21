@@ -1,12 +1,14 @@
 import 'dart:ui';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
@@ -266,61 +268,8 @@ class _DocumentsScreenState extends State<DocumentsScreen>
   }
 
 
-  Future<void> _uploadAgreementPdf(Map<String, dynamic> doc) async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf'],
-        withData: kIsWeb,
-      );
-      if (result == null || result.files.isEmpty || !mounted) return;
-      final file = result.files.first;
-      setState(() => _isUploading = true);
-      String fileData;
-      if (kIsWeb) {
-        if (file.bytes == null) {
-          if (mounted) SnackbarHelper.showError(context, 'Could not read PDF file');
-          setState(() => _isUploading = false);
-          return;
-        }
-        fileData = 'data:application/pdf;base64,${base64Encode(file.bytes!)}';
-      } else {
-        if (file.path == null || file.path!.isEmpty) {
-          if (mounted) SnackbarHelper.showError(context, 'Could not read PDF path');
-          setState(() => _isUploading = false);
-          return;
-        }
-        fileData = file.path!;
-      }
-      final response = await _api.uploadDocument(
-        documentType: doc['key'],
-        filePath: fileData,
-      );
-      if (!mounted) {
-        setState(() => _isUploading = false);
-        return;
-      }
-      if (response['success'] == true) {
-        SnackbarHelper.showSuccess(context, '${doc['label']} uploaded successfully!');
-        await _loadDocuments();
-      } else {
-        SnackbarHelper.showError(context, response['message']?.toString() ?? 'Upload failed');
-      }
-    } catch (e) {
-      if (mounted) {
-        SnackbarHelper.showError(context, 'Failed to upload agreement PDF');
-      }
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
-    }
-  }
-
+  // Agreement is uploaded as an image (same as passport, signature, etc.)
   Future<void> _showUploadDialog(Map<String, dynamic> doc) async {
-    final isAgreement = (doc['key']?.toString() == 'agreement');
-    if (isAgreement) {
-      await _uploadAgreementPdf(doc);
-      return;
-    }
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: const Color(0xFF141414),
@@ -655,22 +604,66 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     );
   }
 
+  /// Save zip bytes to a temp file and open it (native only).
+  Future<bool> _saveAndOpenZip(Uint8List bytes, String filename) async {
+    if (kIsWeb) {
+      // Web: fall back to sequential open of individual docs
+      return false;
+    }
+    try {
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/$filename';
+      final file = File(path);
+      await file.writeAsBytes(bytes, flush: true);
+      final result = await OpenFilex.open(path);
+      return result.type == ResultType.done || result.type == ResultType.noAppToOpen;
+    } catch (e) {
+      debugPrint('Save/open zip failed: $e');
+      return false;
+    }
+  }
+
   Future<void> _handleDownloadAll() async {
     if (_isDownloadingAll || _uploadedDocuments.isEmpty) return;
     setState(() => _isDownloadingAll = true);
     try {
-      int opened = 0;
-      for (final doc in _uploadedDocuments) {
-        final ok = await _downloadDocument(doc);
-        if (ok) opened++;
-      }
-      if (mounted) {
-        if (opened > 0) {
-          SnackbarHelper.showSuccess(context, 'Opening $opened document(s)...');
-        } else {
-          SnackbarHelper.showError(context, 'Could not open documents');
+      final ids = _uploadedDocuments.map((d) => d['id']).where((id) => id != null).toList();
+      final result = await _api.downloadMyDocumentsBulk(documentIds: ids);
+      if (!mounted) return;
+      if (result['success'] == true && result['bytes'] != null) {
+        final bytes = result['bytes'] is Uint8List
+            ? result['bytes'] as Uint8List
+            : Uint8List.fromList(List<int>.from(result['bytes'] as List));
+        final filename = (result['filename'] ?? 'my_documents.zip').toString();
+        final ok = await _saveAndOpenZip(bytes, filename);
+        if (mounted) {
+          if (ok) {
+            SnackbarHelper.showSuccess(context, 'Documents downloaded (${ids.length} files)');
+          } else if (kIsWeb) {
+            // Web fallback: open each
+            int opened = 0;
+            for (final doc in _uploadedDocuments) {
+              if (await _downloadDocument(doc)) opened++;
+            }
+            if (opened > 0) {
+              SnackbarHelper.showSuccess(context, 'Opening $opened document(s)...');
+            } else {
+              SnackbarHelper.showError(context, 'Could not open documents');
+            }
+          } else {
+            SnackbarHelper.showError(context, 'Downloaded but could not open zip');
+          }
+        }
+      } else {
+        if (mounted) {
+          SnackbarHelper.showError(
+            context,
+            result['message']?.toString() ?? 'Bulk download failed',
+          );
         }
       }
+    } catch (e) {
+      if (mounted) SnackbarHelper.showError(context, 'Bulk download failed');
     } finally {
       if (mounted) setState(() => _isDownloadingAll = false);
     }
@@ -680,27 +673,64 @@ class _DocumentsScreenState extends State<DocumentsScreen>
     if (_isDownloadingSelected || _selectedIndices.isEmpty) return;
     setState(() => _isDownloadingSelected = true);
     try {
-      int opened = 0;
+      final ids = <dynamic>[];
       for (final index in _selectedIndices) {
         if (index < 0 || index >= _docs.length) continue;
         final key = _docs[index]['key']?.toString();
         if (key == null) continue;
         final uploaded = _getDocument(key);
-        if (uploaded == null) continue;
-        final ok = await _downloadDocument(uploaded);
-        if (ok) opened++;
+        if (uploaded == null || uploaded['id'] == null) continue;
+        ids.add(uploaded['id']);
       }
-      if (mounted) {
-        if (opened > 0) {
-          SnackbarHelper.showSuccess(context, 'Opening $opened document(s)...');
-        } else {
+      if (ids.isEmpty) {
+        if (mounted) {
           SnackbarHelper.showError(
             context,
             'No uploaded documents in selection to download',
           );
         }
+        return;
+      }
+      final result = await _api.downloadMyDocumentsBulk(documentIds: ids);
+      if (!mounted) return;
+      if (result['success'] == true && result['bytes'] != null) {
+        final bytes = result['bytes'] is Uint8List
+            ? result['bytes'] as Uint8List
+            : Uint8List.fromList(List<int>.from(result['bytes'] as List));
+        final filename = (result['filename'] ?? 'my_documents.zip').toString();
+        final ok = await _saveAndOpenZip(bytes, filename);
+        if (mounted) {
+          if (ok) {
+            SnackbarHelper.showSuccess(context, 'Downloaded ${ids.length} document(s)');
+          } else if (kIsWeb) {
+            int opened = 0;
+            for (final id in ids) {
+              final doc = _uploadedDocuments.firstWhere(
+                (d) => d['id'] == id,
+                orElse: () => <String, dynamic>{},
+              );
+              if (doc.isNotEmpty && await _downloadDocument(doc)) opened++;
+            }
+            if (opened > 0) {
+              SnackbarHelper.showSuccess(context, 'Opening $opened document(s)...');
+            } else {
+              SnackbarHelper.showError(context, 'Could not open documents');
+            }
+          } else {
+            SnackbarHelper.showError(context, 'Downloaded but could not open zip');
+          }
+        }
+      } else {
+        if (mounted) {
+          SnackbarHelper.showError(
+            context,
+            result['message']?.toString() ?? 'Bulk download failed',
+          );
+        }
       }
       _clearSelection();
+    } catch (e) {
+      if (mounted) SnackbarHelper.showError(context, 'Bulk download failed');
     } finally {
       if (mounted) setState(() => _isDownloadingSelected = false);
     }

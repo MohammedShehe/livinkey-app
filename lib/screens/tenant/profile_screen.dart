@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
@@ -49,6 +50,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   String? _profilePicture;
   String _residency = '';
   int _periodOfStay = 0;
+  String _appVersion = '';
 
   @override
   void initState() {
@@ -70,7 +72,21 @@ class _ProfileScreenState extends State<ProfileScreen>
       _fadeController.forward();
       _loadProfile();
       _checkFeedbackStatus();
+      _loadAppVersion();
     });
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = '${info.version}+${info.buildNumber}';
+        });
+      }
+    } catch (_) {
+      // ignore
+    }
   }
 
   @override
@@ -430,6 +446,20 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                         ),
                       ),
+
+                      if (_appVersion.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        Center(
+                          child: Text(
+                            'Version $_appVersion',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.35),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
 
                       const SizedBox(height: 16),
                     ],
