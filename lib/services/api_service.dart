@@ -1099,6 +1099,42 @@ class ApiService {
     }
   }
 
+  // ============ VEHICLE ============
+
+  Future<Map<String, dynamic>> getMyVehicle() async {
+    try {
+      final response = await _dio.get('/documents/vehicle');
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        return e.response!.data;
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> updateMyVehicle({
+    bool? hasVehicle,
+    String? vehicleNumber,
+  }) async {
+    try {
+      final body = <String, dynamic>{};
+      if (hasVehicle != null) body['has_vehicle'] = hasVehicle;
+      if (vehicleNumber != null) body['vehicle_number'] = vehicleNumber;
+      final response = await _dio.put('/documents/vehicle', data: body);
+      return response.data;
+    } on DioException catch (e) {
+      if (e.response != null && e.response!.data != null) {
+        return e.response!.data;
+      }
+      return {'success': false, 'message': 'Network error. Please try again.'};
+    } catch (e) {
+      return {'success': false, 'message': 'An error occurred. Please try again.'};
+    }
+  }
+
   Future<Map<String, dynamic>> uploadDocument({
     required String documentType,
     required String filePath,

@@ -13,6 +13,7 @@ import '../auth/login_screen.dart';
 import '../guest/guest_screen.dart';
 import 'agreements_screen.dart';
 import 'notices_screen.dart';
+import 'vehicle_screen.dart';
 
 class TenantDrawer extends StatelessWidget {
   /// Current bottom-nav tab (0 Home … 4 Profile) for active highlight.
@@ -90,6 +91,14 @@ class TenantDrawer extends StatelessWidget {
                             Navigator.pop(context);
                             final state = context.findAncestorStateOfType<TenantScreenState>();
                             state?.navigateToTab(3);
+                          },
+                        ),
+                        _buildDrawerItem(
+                          icon: Icons.directions_car_rounded,
+                          title: 'Vehicle',
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VehicleScreen()));
                           },
                         ),
                         _buildDrawerItem(
