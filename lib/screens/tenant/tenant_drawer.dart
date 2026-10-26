@@ -25,12 +25,13 @@ class TenantDrawer extends StatelessWidget {
     final double screenHeight = MediaQuery.of(context).size.height;
     final double minDimension = screenWidth < screenHeight ? screenWidth : screenHeight;
 
+    // Significantly larger logo for better visibility in the navigation drawer
     if (screenWidth >= 600) {
-      return minDimension * 0.25;
+      return minDimension * 0.42;
     } else if (screenWidth >= 400) {
-      return minDimension * 0.20;
+      return minDimension * 0.38;
     } else {
-      return minDimension * 0.18;
+      return minDimension * 0.36;
     }
   }
 

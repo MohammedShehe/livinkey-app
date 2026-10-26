@@ -274,12 +274,13 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
 
   double _getLogoSize(BuildContext context) {
     final double screenWidth = MediaQuery.of(context).size.width;
+    // Much larger logo for better visibility
     if (screenWidth >= 600) {
-      return 160.0; // Increased from 120.0
+      return 220.0;
     } else if (screenWidth >= 400) {
-      return 100.0; // Increased from 64.0
+      return 160.0;
     } else {
-      return 80.0; // Increased from 50.0
+      return 130.0;
     }
   }
 

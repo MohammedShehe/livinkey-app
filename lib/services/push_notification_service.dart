@@ -110,6 +110,24 @@ class PushNotificationService {
       settings,
       onDidReceiveNotificationResponse: _handleNotificationTap,
     );
+
+    // Create the Android notification channel so FCM system notifications
+    // and local notifications both appear in the device notification drawer.
+    if (Platform.isAndroid) {
+      const channel = AndroidNotificationChannel(
+        'livinkey_channel',
+        'Livinkey Notifications',
+        description: 'Notifications from Livinkey',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
+      );
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+    }
   }
 
   Future<void> _getFCMToken() async {
@@ -188,8 +206,13 @@ class PushNotificationService {
     _showLocalNotification(message);
 
     // Refresh the in-app notification list so the badge updates immediately
+    // Detect role from SharedPreferences so guest notifications also update.
     try {
-      NotificationService().refresh(isTenant: true);
+      SharedPreferences.getInstance().then((prefs) {
+        final role = prefs.getString('lk_role') ?? 'tenant';
+        final isTenant = role != 'guest';
+        NotificationService().refresh(isTenant: isTenant);
+      });
     } catch (_) {}
   }
 
@@ -340,9 +363,15 @@ class PushNotificationService {
 
       if (!isSupported) return;
 
-      final count = await _api.getUnreadTenantCount();
-      final unreadCount = count['unreadCount'] ?? 0;
-      await AppBadgePlus.updateBadge(unreadCount is int ? unreadCount : 0);
+      final prefs = await SharedPreferences.getInstance();
+      final role = prefs.getString('lk_role') ?? 'tenant';
+      final isTenant = role != 'guest';
+
+      final count = isTenant
+          ? await _api.getUnreadTenantCount()
+          : await _api.getUnreadGuestCount();
+      final unreadCount = count['unreadCount'] ?? count['unread_count'] ?? 0;
+      await AppBadgePlus.updateBadge(unreadCount is int ? unreadCount : int.tryParse(unreadCount.toString()) ?? 0);
     } catch (e) {
       // ignore
     }
@@ -381,10 +410,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // When the FCM payload includes a `notification` block, Android/iOS already
   // display a system notification. Showing another local one causes duplicates.
   // Only create a local notification for data-only messages.
-  if (message.notification != null) {
-    return;
-  }
-
+  // Still ensure the channel exists so system notifications appear in the drawer.
   final localNotifications = FlutterLocalNotificationsPlugin();
 
   // Must init plugin in background isolate before show()
@@ -394,6 +420,25 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await localNotifications.initialize(
     const InitializationSettings(android: androidSettings, iOS: iosSettings),
   );
+
+  // Ensure channel exists (critical for device notification drawer on Android 8+)
+  const channel = AndroidNotificationChannel(
+    'livinkey_channel',
+    'Livinkey Notifications',
+    description: 'Notifications from Livinkey',
+    importance: Importance.max,
+    playSound: true,
+    enableVibration: true,
+    showBadge: true,
+  );
+  await localNotifications
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  if (message.notification != null) {
+    return;
+  }
 
   const androidDetails = AndroidNotificationDetails(
     'livinkey_channel',
