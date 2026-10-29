@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../services/api_service.dart';
+import '../../services/app_events.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/guest/pg_card.dart';
 import '../../widgets/guest/pg_detail_modal.dart';
@@ -49,6 +50,7 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
   @override
   void initState() {
     super.initState();
+    AppEvents.refreshTick.addListener(_onAppRefresh);
     _fadeController = AnimationController(
       duration: kFadeDuration,
       vsync: this,
@@ -70,11 +72,16 @@ class _GuestHomeScreenState extends State<GuestHomeScreen>
 
   @override
   void dispose() {
+    AppEvents.refreshTick.removeListener(_onAppRefresh);
     _fadeController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  void _onAppRefresh() {
+    if (mounted && !_isLoading) _loadData(silent: true);
+  }
+
+  Future<void> _loadData({bool silent = false}) async {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {

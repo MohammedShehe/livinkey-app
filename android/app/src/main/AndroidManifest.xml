@@ -5,7 +5,9 @@
         android:label="Livinkey"
         android:name="androidx.multidex.MultiDexApplication"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true"
+        android:usesCleartextTraffic="false"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:enableOnBackInvokedCallback="true">   
 
         <activity
@@ -97,6 +99,14 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="tez" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="gpay" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="bhim" />
         </intent>
         
         <intent>

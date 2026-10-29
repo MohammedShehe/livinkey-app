@@ -1,3 +1,4 @@
+import '../../utils/password_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
@@ -1019,8 +1020,9 @@ class _SignUpScreenState extends State<SignUpScreen>
         if (value == null || value.isEmpty) {
           return 'Please enter a password';
         }
-        if (value.length < 6) {
-          return 'Password must be at least 6 characters';
+        final pwErr = validatePassword(value);
+        if (pwErr != null) {
+          return pwErr;
         }
         return null;
       },
@@ -1073,7 +1075,7 @@ class _SignUpScreenState extends State<SignUpScreen>
           ),
           const SizedBox(width: 6),
           Text(
-            'Password must be at least 6 characters',
+            kPasswordHint,
             style: TextStyle(
               color: Colors.white.withOpacity(0.3),
               fontSize: 11,

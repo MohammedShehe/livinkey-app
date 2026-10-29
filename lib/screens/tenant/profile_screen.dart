@@ -1,3 +1,4 @@
+import '../../services/session_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -983,11 +984,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await _api.clearToken();
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
-              SnackbarHelper.showSuccess(context, 'Logged out successfully');
+              await SessionManager().logout();
             },
             child: const Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
           ),

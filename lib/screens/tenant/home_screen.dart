@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../services/api_service.dart';
+import '../../services/app_events.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/tenant/stat_card.dart';
 import '../../widgets/tenant/quick_action.dart';
@@ -104,6 +105,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void initState() {
     super.initState();
+    AppEvents.refreshTick.addListener(_onAppRefresh);
     _fadeController = AnimationController(
       duration: kFadeDuration,
       vsync: this,
@@ -125,11 +127,16 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   void dispose() {
+    AppEvents.refreshTick.removeListener(_onAppRefresh);
     _fadeController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadHomeData() async {
+  void _onAppRefresh() {
+    if (mounted && !_isLoading) _loadHomeData(silent: true);
+  }
+
+  Future<void> _loadHomeData({bool silent = false}) async {
     setState(() => _isLoading = true);
     
     try {

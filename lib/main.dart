@@ -11,6 +11,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/tenant/tenant_screen.dart';
 import 'screens/guest/guest_screen.dart';
 import 'services/api_service.dart';
+import 'services/app_events.dart';
 import 'models/auth_models.dart';
 import 'widgets/livinkey_logo.dart' hide kLivinkeyBlack, kLivinkeyGreen;
 import 'services/push_notification_service.dart';
@@ -42,7 +43,27 @@ class LivinkeyApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
+        // Smooth, consistent page transitions on every platform
+        pageTransitionsTheme: const PageTransitionsTheme(builders: {
+          TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        }),
+        snackBarTheme: SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
+      // Keeps layouts intact on phones/tablets with very large or very small
+      // system font sizes, and keeps content readable on wide screens.
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        final clamped = mq.textScaler.clamp(minScaleFactor: 0.9, maxScaleFactor: 1.2);
+        return MediaQuery(
+          data: mq.copyWith(textScaler: clamped),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: const AuthGuard(),
       navigatorObservers: [RouteObserver()],
       routes: {
@@ -84,8 +105,9 @@ class _AuthGuardState extends State<AuthGuard> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // App came back to foreground
+      // App came back to foreground: refresh everything quietly
       _onAppResumed();
+      AppEvents.requestRefresh();
     }
   }
 
@@ -191,7 +213,7 @@ class _AuthGuardState extends State<AuthGuard> with WidgetsBindingObserver {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString(kStorageToken);
+      final token = await _api.getToken();
       final userJson = prefs.getString(kStorageUser);
       final role = prefs.getString(kStorageRole);
 

@@ -1,3 +1,4 @@
+import '../../services/session_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -404,16 +405,7 @@ class TenantDrawer extends StatelessWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              try {
-                await PushNotificationService().removeToken();
-              } catch (_) {}
-              await ApiService().clearToken();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-                SnackbarHelper.showSuccess(context, 'Logged out successfully');
-              }
+              await SessionManager().logout();
             },
             child: const Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
           ),

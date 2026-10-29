@@ -1,3 +1,4 @@
+import '../../utils/password_policy.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
@@ -145,8 +146,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       return;
     }
 
-    if (newPassword.length < 6) {
-      SnackbarHelper.showError(context, 'Password must be at least 6 characters');
+    final pwErr = validatePassword(newPassword);
+      if (pwErr != null) {
+      SnackbarHelper.showError(context, pwErr);
       return;
     }
 
@@ -566,7 +568,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'Password must be at least 6 characters',
+                                kPasswordHint,
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.3),
                                   fontSize: 12,

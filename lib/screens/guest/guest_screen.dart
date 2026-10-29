@@ -1,3 +1,4 @@
+import '../../services/session_manager.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -294,16 +295,7 @@ class GuestScreenState extends State<GuestScreen> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              
-              // NEW: Remove FCM token before logout
-              final pushService = PushNotificationService();
-              await pushService.removeToken();
-              
-              await _api.clearToken();
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
-              SnackbarHelper.showSuccess(context, 'Logged out successfully');
+              await SessionManager().logout();
             },
             child: const Text(
               'Logout',

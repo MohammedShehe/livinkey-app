@@ -1,3 +1,4 @@
+import 'app_events.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -173,6 +174,7 @@ class PushNotificationService {
   Future<void> _setupMessageHandlers() async {
     // 1. Foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      AppEvents.requestRefresh();
       _handleForegroundMessage(message);
     });
 

@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../utils/constants.dart';
 import '../models/auth_models.dart';
+import 'session_manager.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -17,105 +19,135 @@ class ApiService {
   String? _token;
   String? _role;
 
+  // The login token lives in the platform keystore, not in plain preferences.
+  static const FlutterSecureStorage _secure = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
   Dio get dio => _dio;
+
+  /// Reads the token from secure storage (migrating an old plain-text token once).
+  Future<String?> _loadToken() async {
+    try {
+      var token = await _secure.read(key: kStorageToken);
+      if (token == null || token.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final legacy = prefs.getString(kStorageToken);
+        if (legacy != null && legacy.isNotEmpty) {
+          await _secure.write(key: kStorageToken, value: legacy);
+          await prefs.remove(kStorageToken);
+          token = legacy;
+        }
+      }
+      return (token != null && token.isNotEmpty) ? token : null;
+    } catch (_) {
+      // Keystore hiccup: fall back to whatever we have in memory. Never log the user out for this.
+      return _token;
+    }
+  }
+
+  static const Set<String> _sessionEndCodes = {
+    'TOKEN_EXPIRED',
+    'TOKEN_INVALID',
+    'ACCOUNT_DISABLED',
+  };
+
+  static bool _isRetryable(DioException e) {
+    if (e.requestOptions.method.toUpperCase() != 'GET') return false;
+    return e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.connectionError ||
+        (e.response?.statusCode != null &&
+            const [502, 503, 504].contains(e.response!.statusCode));
+  }
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString(kStorageToken);
+    _token = await _loadToken();
     _role = prefs.getString(kStorageRole);
-    
-
 
     _dio = Dio(BaseOptions(
       baseUrl: kApiBaseUrl,
-      // Slow mobile networks (India 3G/weak Wi‑Fi) often need >30s.
-      connectTimeout: const Duration(seconds: 60),
-      receiveTimeout: const Duration(seconds: 60),
+      // Slow mobile networks (India 3G/weak Wi-Fi) often need >30s.
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 45),
       sendTimeout: const Duration(seconds: 60),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Cache-Control': 'no-cache',
       },
     ));
 
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        // ============================================================
-        // FIXED: ALWAYS get token from SharedPreferences on each request
-        // This ensures the interceptor always has the latest token
-        // ============================================================
-        final prefs = await SharedPreferences.getInstance();
-        final token = prefs.getString(kStorageToken);
-        
+        _token ??= await _loadToken();
+        final token = _token;
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';
-        } else {
         }
-        
-        options.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
-        options.headers['Pragma'] = 'no-cache';
-        options.headers['Expires'] = '0';
+        options.headers['Cache-Control'] = 'no-cache';
         return handler.next(options);
       },
-      onResponse: (response, handler) {
-        return handler.next(response);
-      },
       onError: (error, handler) async {
-        // ============================================================
-        // SESSION SAFETY:
-        // - Only a true 401 (unauthenticated) on a matching-role route
-        //   may clear the stored session.
-        // - 403 means "forbidden" (permission / resource) — NEVER logout.
-        // - Cross-role calls and FCM device routes must NEVER logout.
-        // Backend JWT is configured for 90 days; the client must not
-        // invent shorter session lifetimes.
-        // ============================================================
-        final status = error.response?.statusCode;
-        if (status == 401) {
-          final path = error.requestOptions.path;
-          final role = _role ??
-              (await SharedPreferences.getInstance()).getString(kStorageRole);
-          final isGuestPath = path.contains('/guests/');
-          final isTenantPath = path.contains('/tenants/');
-          final isFcmOrDevicePath = path.contains('fcm-token') ||
-              path.contains('/device/');
-
-          final isCrossRole = (isGuestPath && role == 'tenant') ||
-              (isTenantPath && role == 'guest');
-
-          if (isFcmOrDevicePath || isCrossRole) {
-            // Keep session intact
-          } else {
-            await _handleUnauthorized();
+        // ---- 1. Smooth over flaky networks: retry GET requests quietly ----
+        if (_isRetryable(error)) {
+          final attempt = (error.requestOptions.extra['retry_attempt'] as int?) ?? 0;
+          if (attempt < 2) {
+            await Future<void>.delayed(Duration(milliseconds: 700 * (attempt + 1)));
+            error.requestOptions.extra['retry_attempt'] = attempt + 1;
+            try {
+              final response = await _dio.fetch<dynamic>(error.requestOptions);
+              return handler.resolve(response);
+            } on DioException catch (e) {
+              return handler.next(e);
+            }
           }
         }
-        // 403: do not clear token
+
+        // ---- 2. Session handling ----
+        // The user is signed out ONLY when the server explicitly says the
+        // session is over (token expired after the backend-defined number of
+        // days, token invalid, or account deactivated). Wrong passwords,
+        // missing permissions, timeouts, 5xx errors etc. never sign anyone out.
+        if (error.response?.statusCode == 401) {
+          final data = error.response?.data;
+          final code = data is Map ? data['code']?.toString() : null;
+          final sentAuth = error.requestOptions.headers['Authorization']?.toString();
+          // Ignore answers to requests that were sent with an older token
+          // (for example right after logging in again).
+          final isStale = sentAuth != null && _token != null && sentAuth != 'Bearer $_token';
+          if (code != null && _sessionEndCodes.contains(code) && !isStale) {
+            final message = data is Map && data['message'] != null
+                ? data['message'].toString()
+                : 'Your session has ended. Please sign in again.';
+            await SessionManager().endSession(message);
+          }
+        }
         return handler.next(error);
       },
     ));
   }
 
-  Future<void> _handleUnauthorized() async {
-    await clearToken();
-  }
-
   Future<void> setToken(String token, {String? role}) async {
     _token = token;
     _role = role;
+    SessionManager().reset();
+    try {
+      await _secure.write(key: kStorageToken, value: token);
+    } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(kStorageToken, token);
+    await prefs.remove(kStorageToken); // never keep a plain-text copy
     if (role != null) {
       await prefs.setString(kStorageRole, role);
     }
-    
-    // Verify token was saved
-    final savedToken = prefs.getString(kStorageToken);
   }
 
   Future<void> clearToken() async {
     _token = null;
     _role = null;
+    try {
+      await _secure.delete(key: kStorageToken);
+    } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(kStorageToken);
     await prefs.remove(kStorageRole);
@@ -123,9 +155,7 @@ class ApiService {
   }
 
   Future<String?> getToken() async {
-    // Always get from SharedPreferences to ensure freshness
-    final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString(kStorageToken);
+    _token ??= await _loadToken();
     return _token;
   }
 
@@ -155,10 +185,9 @@ class ApiService {
 
   Future<bool> isLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(kStorageToken);
+    final token = await getToken();
     final user = prefs.getString(kStorageUser);
-    final loggedIn = token != null && token.isNotEmpty && user != null;
-    return loggedIn;
+    return token != null && token.isNotEmpty && user != null;
   }
 
   Future<String?> getStoredRole() async {
@@ -239,40 +268,60 @@ class ApiService {
 
   /// User-facing message for Dio failures (login/signup and general API).
   static String mapDioError(DioException e, {String fallback = 'Something went wrong. Please try again.'}) {
-    // Server returned a body — prefer its message when present
+    final status = e.response?.statusCode;
     final data = e.response?.data;
-    if (data is Map && data['message'] != null) {
+
+    // Prefer the server's own (already user-friendly) message for client errors.
+    if (data is Map && data['message'] != null && (status == null || status < 500)) {
       final m = data['message'].toString().trim();
       if (m.isNotEmpty) return m;
+    }
+    if (status != null && status >= 500) {
+      return status == 502 || status == 503 || status == 504
+          ? 'The server is temporarily unavailable. Please try again in a moment.'
+          : 'Something went wrong on our side. Please try again shortly.';
     }
 
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
-        return 'The server is taking too long to respond. Please try again.';
+        return 'The connection is slow right now. Please try again.';
       case DioExceptionType.connectionError:
-        return 'Unable to reach the server. Check your internet connection and try again.';
-      case DioExceptionType.badResponse:
-        final code = e.response?.statusCode;
-        if (code == 502 || code == 503 || code == 504) {
-          return 'Server is temporarily unavailable. Please try again in a moment.';
-        }
-        return fallback;
+        return 'You appear to be offline. Check your internet connection and try again.';
       case DioExceptionType.cancel:
-        return 'Request was cancelled.';
+        return 'Request cancelled.';
       default:
-        // Includes unknown / SSL / DNS style failures
         final msg = e.message?.toLowerCase() ?? '';
         if (msg.contains('socket') ||
             msg.contains('failed host lookup') ||
             msg.contains('network is unreachable') ||
             msg.contains('connection refused') ||
             msg.contains('connection reset')) {
-          return 'Unable to reach the server. Check your internet connection and try again.';
+          return 'You appear to be offline. Check your internet connection and try again.';
         }
         return fallback;
     }
+  }
+
+  /// Exchanges the session token for a 5-minute download token so the real
+  /// token never appears in a URL. [scope] is 'tenant' or 'guest'.
+  Future<String?> getDownloadToken({String? scope}) async {
+    try {
+      final r = (scope ?? (_role == 'guest' ? 'guest' : 'tenant'));
+      final response = await _dio.post('/download-token/$r');
+      final data = response.data;
+      if (data is Map && data['token'] != null) return data['token'].toString();
+    } catch (_) {}
+    return null;
+  }
+
+  /// Builds a browser-openable URL for a protected file using a short-lived token.
+  Future<String?> buildAuthorizedUrl(String path, {String? scope}) async {
+    final t = await getDownloadToken(scope: scope);
+    if (t == null) return null;
+    final sep = path.contains('?') ? '&' : '?';
+    return '$kApiBaseUrl$path${sep}token=${Uri.encodeComponent(t)}';
   }
 
   /// POST with up to [maxAttempts] tries on transient network errors.
@@ -309,9 +358,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -341,7 +390,7 @@ class ApiService {
     } catch (e) {
       return LoginResponse(
         success: false,
-        message: 'An error occurred. Please try again.',
+        message: 'Something went wrong. Please try again.',
       );
     }
   }
@@ -372,7 +421,7 @@ class ApiService {
     } catch (e) {
       return LoginResponse(
         success: false,
-        message: 'An error occurred. Please try again.',
+        message: 'Something went wrong. Please try again.',
       );
     }
   }
@@ -391,7 +440,7 @@ class ApiService {
       }
       return {'success': false, 'message': mapDioError(e)};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -406,9 +455,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -426,12 +475,12 @@ class ApiService {
       }
       return OtpResponse(
         success: false,
-        message: 'Network error. Please try again.',
+        message: 'You appear to be offline. Check your connection and try again.',
       );
     } catch (e) {
       return OtpResponse(
         success: false,
-        message: 'An error occurred. Please try again.',
+        message: 'Something went wrong. Please try again.',
       );
     }
   }
@@ -449,9 +498,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -466,9 +515,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -486,12 +535,12 @@ class ApiService {
       }
       return OtpResponse(
         success: false,
-        message: 'Network error. Please try again.',
+        message: 'You appear to be offline. Check your connection and try again.',
       );
     } catch (e) {
       return OtpResponse(
         success: false,
-        message: 'An error occurred. Please try again.',
+        message: 'Something went wrong. Please try again.',
       );
     }
   }
@@ -509,9 +558,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -528,9 +577,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -542,9 +591,9 @@ class ApiService {
       return response.data;
     } on DioException catch (e) {
       if (e.response != null && e.response!.data != null) return e.response!.data;
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (_) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -554,9 +603,9 @@ class ApiService {
       return response.data;
     } on DioException catch (e) {
       if (e.response != null && e.response!.data != null) return e.response!.data;
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (_) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -566,9 +615,9 @@ class ApiService {
       return response.data;
     } on DioException catch (e) {
       if (e.response != null && e.response!.data != null) return e.response!.data;
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (_) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -578,23 +627,22 @@ class ApiService {
       return response.data;
     } on DioException catch (e) {
       if (e.response != null && e.response!.data != null) return e.response!.data;
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (_) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
   /// Returns a browser-openable URL for the tenant's accepted agreement PDF.
   Future<Map<String, dynamic>> getTenantAgreementPdfUrl() async {
     try {
-      final token = await getToken();
-      if (token == null || token.isEmpty) {
-        return {'success': false, 'message': 'Please login again.'};
+      final url = await buildAuthorizedUrl('/tenants/agreement/pdf', scope: 'tenant');
+      if (url == null) {
+        return {'success': false, 'message': 'We could not prepare the agreement right now. Please try again.'};
       }
-      final url = '$kApiBaseUrl/tenants/agreement/pdf?token=${Uri.encodeComponent(token)}';
       return {'success': true, 'url': url};
     } catch (e) {
-      return {'success': false, 'message': 'Unable to prepare agreement download.'};
+      return {'success': false, 'message': 'We could not prepare the agreement right now. Please try again.'};
     }
   }
 
@@ -606,9 +654,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -633,9 +681,9 @@ class ApiService {
       if (e.response?.statusCode == 401) {
         return {'success': false, 'message': 'Unable to load dashboard. Please try again.'};
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -647,9 +695,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -661,9 +709,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -679,9 +727,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -713,9 +761,9 @@ class ApiService {
       if (e.response?.statusCode == 304) {
         return {'success': true, 'data': [], 'message': 'Cached - no new data'};
       }
-      return {'success': false, 'message': 'Network error. Please try again.', 'data': []};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.', 'data': []};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.', 'data': []};
+      return {'success': false, 'message': 'Something went wrong. Please try again.', 'data': []};
     }
   }
 
@@ -727,9 +775,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -741,9 +789,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -786,9 +834,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -800,9 +848,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -926,14 +974,14 @@ class ApiService {
       }
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout) {
-        return {'success': false, 'message': 'Connection timeout. Please try again.'};
+        return {'success': false, 'message': 'The connection is slow right now. Please try again.'};
       }
       if (e.type == DioExceptionType.connectionError) {
-        return {'success': false, 'message': 'Network error. Please check your connection.'};
+        return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -948,9 +996,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -962,9 +1010,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1063,9 +1111,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1079,9 +1127,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1093,9 +1141,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1109,9 +1157,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1129,9 +1177,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1238,10 +1286,10 @@ class ApiService {
       }
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout) {
-        return {'success': false, 'message': 'Connection timeout. Please try again.'};
+        return {'success': false, 'message': 'The connection is slow right now. Please try again.'};
       }
       if (e.type == DioExceptionType.connectionError) {
-        return {'success': false, 'message': 'Network error. Please check your connection.'};
+        return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
       }
       if (e.type == DioExceptionType.badResponse) {
         final statusCode = e.response?.statusCode;
@@ -1249,7 +1297,7 @@ class ApiService {
           return {'success': false, 'message': 'Invalid document type or file format.'};
         }
         if (statusCode == 401) {
-          return {'success': false, 'message': 'Authentication failed. Please try again.'};
+          return {'success': false, 'message': 'We could not verify this request. Please try again.'};
         }
         if (statusCode == 403) {
           return {'success': false, 'message': 'You do not have permission to download this document.'};
@@ -1258,9 +1306,9 @@ class ApiService {
           return {'success': false, 'message': 'File too large. Please use a smaller image.'};
         }
       }
-      return {'success': false, 'message': 'Network error: ${e.message}'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1311,11 +1359,11 @@ class ApiService {
       if (status == 404) {
         return {'success': false, 'message': 'Document not found'};
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
       return {
         'success': false,
-        'message': 'An error occurred. Please try again.'
+        'message': 'Something went wrong. Please try again.'
       };
     }
   }
@@ -1380,11 +1428,11 @@ class ApiService {
       if (status == 400) {
         return {'success': false, 'message': 'No documents available to download'};
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
       return {
         'success': false,
-        'message': 'An error occurred. Please try again.'
+        'message': 'Something went wrong. Please try again.'
       };
     }
   }
@@ -1399,9 +1447,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1413,9 +1461,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1427,9 +1475,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1441,9 +1489,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1455,9 +1503,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1469,9 +1517,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1483,9 +1531,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1497,9 +1545,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1511,9 +1559,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1525,9 +1573,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1544,9 +1592,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1558,9 +1606,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1574,9 +1622,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1588,9 +1636,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1602,9 +1650,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1618,9 +1666,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1632,9 +1680,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1646,9 +1694,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1662,9 +1710,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1679,9 +1727,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null) {
         return e.response!.data;
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1711,9 +1759,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null && e.response!.data is Map) {
         return Map<String, dynamic>.from(e.response!.data as Map);
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 
@@ -1734,9 +1782,9 @@ class ApiService {
       if (e.response != null && e.response!.data != null && e.response!.data is Map) {
         return Map<String, dynamic>.from(e.response!.data as Map);
       }
-      return {'success': false, 'message': 'Network error. Please try again.'};
+      return {'success': false, 'message': 'You appear to be offline. Check your connection and try again.'};
     } catch (e) {
-      return {'success': false, 'message': 'An error occurred. Please try again.'};
+      return {'success': false, 'message': 'Something went wrong. Please try again.'};
     }
   }
 }

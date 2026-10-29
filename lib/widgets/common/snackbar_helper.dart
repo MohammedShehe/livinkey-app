@@ -113,6 +113,7 @@ class SnackbarHelper {
     // happens to mention the word "token" (e.g. FCM token errors).
     if (lower.contains('unauthorized') ||
         lower.contains('401') ||
+        lower.contains('session has ended') ||
         lower.contains('session expired') ||
         lower.contains('invalid token') ||
         lower.contains('jwt expired') ||

@@ -1,3 +1,4 @@
+import '../../services/session_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -717,13 +718,7 @@ class _GuestProfileScreenState extends State<GuestProfileScreen>
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              await _api.clearToken();
-              if (mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-                SnackbarHelper.showSuccess(context, 'Logged out successfully');
-              }
+              await SessionManager().logout();
             },
             child: const Text(
               'Logout',

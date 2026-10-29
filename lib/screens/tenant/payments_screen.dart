@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -10,8 +11,12 @@ import 'package:image_picker/image_picker.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../services/api_service.dart';
+import '../../services/upi_payment_service.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/tenant/payment_chip.dart';
+import '../../widgets/tenant/bill_breakdown_card.dart';
+import '../../widgets/tenant/upi_app_sheet.dart';
+import '../../services/app_events.dart';
 import '../../widgets/common/snackbar_helper.dart';
 import '../../widgets/common/loading_indicator.dart';
 import '../../models/auth_models.dart';
@@ -27,7 +32,7 @@ class PaymentsScreen extends StatefulWidget {
 }
 
 class _PaymentsScreenState extends State<PaymentsScreen>
-    with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
+    with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin, WidgetsBindingObserver {
   @override
   bool get wantKeepAlive => true;
 
@@ -58,6 +63,8 @@ class _PaymentsScreenState extends State<PaymentsScreen>
   double? _scopedQrAmount;
   bool _isGeneratingScopedQr = false;
 
+  bool _awaitingUpiReturn = false;
+  Timer? _liveTimer;
   bool _isDownloadingReceipt = false;
   int? _downloadingReceiptId;
 
@@ -77,14 +84,83 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     ).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOutCubic),
     );
+    WidgetsBinding.instance.addObserver(this);
+    AppEvents.refreshTick.addListener(_onExternalRefresh);
+    // Quietly check for changes (payment verified, fine added...) while the screen is open.
+    _liveTimer = Timer.periodic(const Duration(seconds: 40), (_) => _silentRefresh());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _fadeController.forward();
       _loadPaymentData();
     });
   }
 
+  void _onExternalRefresh() => _silentRefresh();
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _awaitingUpiReturn) {
+      _awaitingUpiReturn = false;
+      _loadPaymentData(silent: true);
+      _showAfterPaymentPrompt();
+    }
+  }
+
+  /// Compares the latest bill with what is on screen and reloads only if it changed.
+  Future<void> _silentRefresh() async {
+    if (!mounted || _isLoading || _isSubmittingProof || _isRefreshing) return;
+    try {
+      final r = await _api.getCurrentBill();
+      if (!mounted || r['success'] != true || r['data'] == null) return;
+      final billData = r['data']['bill'];
+      final latest = billData != null ? BillModel.fromJson(billData) : null;
+      final cur = _currentBill;
+      final changed = (latest == null) != (cur == null) ||
+          (latest != null && cur != null &&
+              (latest.id != cur.id ||
+                  latest.status != cur.status ||
+                  (latest.paidAmount - cur.paidAmount).abs() > 0.005 ||
+                  (latest.fineAmount - cur.fineAmount).abs() > 0.005 ||
+                  (latest.totalAmount - cur.totalAmount).abs() > 0.005));
+      if (changed) await _loadPaymentData(silent: true);
+    } catch (_) {}
+  }
+
+  void _showAfterPaymentPrompt() {
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF151515),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Did your payment go through?',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
+        content: Text(
+          'If you paid successfully, upload a screenshot or the transaction ID so the property team can verify it quickly. Your bill updates automatically once it is verified.',
+          style: TextStyle(color: Colors.white.withOpacity(0.7), height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Not yet'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: kLivinkeyGreen, foregroundColor: Colors.black),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              SnackbarHelper.showInfo(context, 'Scroll down to "Submit payment proof" and attach your screenshot.');
+            },
+            child: const Text('Yes, I paid'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _liveTimer?.cancel();
+    AppEvents.refreshTick.removeListener(_onExternalRefresh);
+    WidgetsBinding.instance.removeObserver(this);
     _fadeController.dispose();
     _transactionIdController.dispose();
     _amountController.dispose();
@@ -92,9 +168,9 @@ class _PaymentsScreenState extends State<PaymentsScreen>
     super.dispose();
   }
 
-  Future<void> _loadPaymentData() async {
+  Future<void> _loadPaymentData({bool silent = false}) async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    if (!silent) setState(() => _isLoading = true);
     try {
       final billResponse = await _api.getCurrentBill();
       if (billResponse['success'] == true && billResponse['data'] != null) {
@@ -127,8 +203,8 @@ class _PaymentsScreenState extends State<PaymentsScreen>
         await NotificationService().refresh(isTenant: true);
       }
     } catch (e) {
-      if (mounted) {
-        SnackbarHelper.showError(context, 'Failed to load payment data');
+      if (mounted && !silent) {
+        SnackbarHelper.showError(context, "We couldn't load your payments. Pull down to try again.");
       }
     } finally {
       if (mounted) {
@@ -293,6 +369,10 @@ class _PaymentsScreenState extends State<PaymentsScreen>
                     const SizedBox(height: 8),
 
                     _buildPaymentStats(),
+                    if (_currentBill != null) ...[
+                      const SizedBox(height: 16),
+                      BillBreakdownCard(bill: _currentBill!),
+                    ],
                     const SizedBox(height: 28),
 
                     Row(
@@ -610,24 +690,18 @@ class _PaymentsScreenState extends State<PaymentsScreen>
       return;
     }
     final data = Map<String, dynamic>.from(response['data'] ?? {});
-    final rawLinks = data['app_links'];
-    final links = rawLinks is Map ? Map<String, dynamic>.from(rawLinks) : <String, dynamic>{};
-    final candidates = <String>[
-      if (links['phonepe']?.toString().isNotEmpty == true) links['phonepe'].toString(),
-      if (links['paytm']?.toString().isNotEmpty == true) links['paytm'].toString(),
-      if (links['googlepay']?.toString().isNotEmpty == true) links['googlepay'].toString(),
-      if (links['upi']?.toString().isNotEmpty == true) links['upi'].toString(),
-      if (data['upi_link']?.toString().isNotEmpty == true) data['upi_link'].toString(),
-    ];
-    for (final link in candidates) {
-      final uri = Uri.tryParse(link);
-      if (uri != null) {
-        try {
-          if (await canLaunchUrl(uri) && await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
-        } catch (_) {}
-      }
+    final query = UpiPaymentService.queryFrom(data['upi_link']?.toString()) ??
+        UpiPaymentService.queryFrom((data['app_links'] is Map ? data['app_links']['upi'] : null)?.toString());
+    if (query == null) {
+      SnackbarHelper.showError(context, 'UPI payment is not available right now. Please scan the QR code or use another payment method.');
+      return;
     }
-    SnackbarHelper.showError(context, 'No supported UPI payment app is installed on this device. You can scan the QR code instead.');
+    final opened = await UpiAppSheet.show(context, upiQuery: query, amountLabel: fmtINR(amount));
+    if (opened) {
+      _awaitingUpiReturn = true;
+    } else if (mounted) {
+      SnackbarHelper.showWarning(context, 'No UPI app was opened. You can scan the QR code with any UPI app instead.');
+    }
   }
 
 
@@ -2035,19 +2109,20 @@ class _PaymentsScreenState extends State<PaymentsScreen>
       type = 'proof';
     }
 
-    final token = await _api.getToken();
-    
-    if (token == null || token.isEmpty) {
-      throw Exception('No authentication token found');
-    }
 
     // ============================================================
     // FIXED: Use TENANT receipt endpoint, not admin endpoint
     // The tenant routes use tenantAuthMiddleware which accepts tenant tokens
     // ============================================================
-    final encodedToken = Uri.encodeComponent(token);
-    final receiptUrl = '${kApiBaseUrl}/tenant-payments/receipt/$type/${payment.id}/download?token=$encodedToken';
-    
+    final receiptUrl = await _api.buildAuthorizedUrl(
+      '/tenant-payments/receipt/$type/${payment.id}/download',
+      scope: 'tenant',
+    );
+    if (receiptUrl == null) {
+      SnackbarHelper.showError(context, "We couldn't prepare your receipt. Please check your connection and try again.");
+      return;
+    }
+
 
     final uri = Uri.parse(receiptUrl);
     
@@ -2065,11 +2140,11 @@ class _PaymentsScreenState extends State<PaymentsScreen>
           SnackbarHelper.showError(context, 'Could not open receipt. Please check your internet connection.');
         }
       } catch (e) {
-        SnackbarHelper.showError(context, 'Could not open receipt: ${e.toString()}');
+        SnackbarHelper.showError(context, "We couldn't open the receipt. Please try again.");
       }
     }
   } catch (e) {
-    SnackbarHelper.showError(context, 'Failed to open receipt');
+    SnackbarHelper.showError(context, "We couldn't open the receipt. Please try again.");
   } finally {
     if (mounted) {
       setState(() {
