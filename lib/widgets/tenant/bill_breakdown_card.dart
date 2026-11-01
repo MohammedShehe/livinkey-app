@@ -24,7 +24,13 @@ class BillBreakdownCard extends StatelessWidget {
     final rows = <_Row>[
       if (bill.rentAmount > 0) _Row('Monthly rent', _inr(bill.rentAmount), Icons.home_rounded),
       if (bill.electricityAmount > 0)
-        _Row('Electricity', _inr(bill.electricityAmount), Icons.bolt_rounded),
+        _Row(
+          (bill.electricityUnits != null && bill.electricityUnits! > 0)
+              ? 'Electricity (${bill.electricityUnits!.toStringAsFixed(bill.electricityUnits! % 1 == 0 ? 0 : 1)} units)'
+              : 'Electricity',
+          _inr(bill.electricityAmount),
+          Icons.bolt_rounded,
+        ),
       if (bill.maintenanceAmount > 0)
         _Row('Maintenance', _inr(bill.maintenanceAmount), Icons.build_rounded),
       if (bill.otherCharges > 0)

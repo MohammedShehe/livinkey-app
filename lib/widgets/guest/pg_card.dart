@@ -104,6 +104,46 @@ class PgCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Offer ribbon (only when an admin has a live offer on this PG)
+                if (pg.hasOffer)
+                  Positioned(
+                    left: 0,
+                    bottom: 8,
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 10, 4),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Color(0xFFE8590C), Color(0xFFF59F00)],
+                        ),
+                        borderRadius: BorderRadius.only(
+                          topRight: Radius.circular(12),
+                          bottomRight: Radius.circular(12),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.local_offer_rounded,
+                            color: Colors.white,
+                            size: 11,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            pg.bestOffer!.headline +
+                                (pg.offers.length > 1
+                                    ? '  +${pg.offers.length - 1}'
+                                    : ''),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 // Rating
                 Positioned(
                   top: 8,
@@ -165,6 +205,33 @@ class PgCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (pg.hasOffer) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF59F00).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: const Color(0xFFF59F00).withOpacity(0.35),
+                        ),
+                      ),
+                      child: Text(
+                        pg.bestOffer!.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFFFFB84D),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Row(
                     children: [

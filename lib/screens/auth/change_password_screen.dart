@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 
 import '../../services/api_service.dart';
+import '../../services/saved_credentials.dart';
 import '../../services/push_notification_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
@@ -184,6 +185,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen>
       if (!mounted) return;
 
       if (response['success'] == true) {
+        // Keep the "Remember me" copy in step with the new password
+        await SavedCredentials.updatePasswordIfSaved(
+          isTenant: widget.isTenant,
+          email: widget.email,
+          newPassword: newPassword,
+        );
+        if (!mounted) return;
         SnackbarHelper.showSuccess(context, 'Password changed successfully!');
 
         // ============================================================

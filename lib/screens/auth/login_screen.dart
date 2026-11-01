@@ -9,6 +9,7 @@ import '../../widgets/livinkey_logo.dart';
 import '../../services/api_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/push_notification_service.dart';
+import '../../services/saved_credentials.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../widgets/common/snackbar_helper.dart';
@@ -37,6 +38,8 @@ class _LoginScreenState extends State<LoginScreen>
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _rememberMe = true;
+  bool _hasSavedLogin = false;
   bool _isLoading = false;
   bool _isTenantLogin = true;
 
@@ -62,6 +65,7 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void initState() {
     super.initState();
+    _loadSavedLogin();
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 1200),
@@ -169,6 +173,30 @@ class _LoginScreenState extends State<LoginScreen>
   // ============================================================
   // FIXED: Login handler with push notification initialization AFTER login
   // ============================================================
+  /// Fills the form from the login saved on this phone (per account type).
+  Future<void> _loadSavedLogin() async {
+    final saved = await SavedCredentials.load(isTenant: _isTenantLogin);
+    if (!mounted) return;
+    setState(() {
+      _hasSavedLogin = saved != null;
+      if (saved != null) {
+        _emailController.text = saved.email;
+        _passwordController.text = saved.password;
+        _rememberMe = true;
+      }
+    });
+  }
+
+  Future<void> _forgetSavedLogin() async {
+    await SavedCredentials.clear(isTenant: _isTenantLogin);
+    if (!mounted) return;
+    setState(() {
+      _hasSavedLogin = false;
+      _passwordController.clear();
+    });
+    SnackbarHelper.showSuccess(context, 'Saved login removed from this phone');
+  }
+
   Future<void> _handleLogin() async {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text.trim();
@@ -246,6 +274,17 @@ class _LoginScreenState extends State<LoginScreen>
       // Ask the platform password manager to save these credentials after a
       // successful sign-in. Saved credentials can then be autofilled next time.
       TextInput.finishAutofillContext(shouldSave: true);
+
+      // In-app "Remember me" (encrypted on this phone) so the next sign-in is one tap.
+      if (_rememberMe) {
+        await SavedCredentials.save(
+          isTenant: _isTenantLogin,
+          email: email,
+          password: password,
+        );
+      } else {
+        await SavedCredentials.clear(isTenant: _isTenantLogin);
+      }
 
       // Save token and user
       await _api.setToken(response.token!, role: response.user!.role);
@@ -470,7 +509,13 @@ class _LoginScreenState extends State<LoginScreen>
                                   return GestureDetector(
                                     onTap: () {
                                       if (_isTenantLogin != tenant) {
-                                        setState(() => _isTenantLogin = tenant);
+                                        setState(() {
+                                          _isTenantLogin = tenant;
+                                          _emailController.clear();
+                                          _passwordController.clear();
+                                          _hasSavedLogin = false;
+                                        });
+                                        _loadSavedLogin();
                                         hapticFeedback();
                                       }
                                     },
@@ -569,6 +614,57 @@ class _LoginScreenState extends State<LoginScreen>
                                 hapticFeedback();
                               },
                             ),
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          // Remember me (encrypted on this phone)
+                          Row(
+                            children: [
+                              SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: Checkbox(
+                                  value: _rememberMe,
+                                  activeColor: const Color(0xFF92C24A),
+                                  checkColor: Colors.black,
+                                  side: BorderSide(
+                                    color: Colors.white.withOpacity(0.4),
+                                  ),
+                                  onChanged: (v) {
+                                    setState(() => _rememberMe = v ?? true);
+                                    hapticFeedback();
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() => _rememberMe = !_rememberMe);
+                                  hapticFeedback();
+                                },
+                                child: Text(
+                                  'Remember me on this phone',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.7),
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              if (_hasSavedLogin)
+                                GestureDetector(
+                                  onTap: _forgetSavedLogin,
+                                  child: Text(
+                                    'Forget',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.45),
+                                      fontSize: 12,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
 
                           const SizedBox(height: 12),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../utils/constants.dart';
@@ -84,6 +85,139 @@ class _PgDetailModalState extends State<PgDetailModal> {
       occupancyPercentage: detail.occupancyPercentage > 0 ? detail.occupancyPercentage : listVersion.occupancyPercentage,
       floors: detail.floors.isNotEmpty ? detail.floors : listVersion.floors,
       reviews: detail.reviews.isNotEmpty ? detail.reviews : listVersion.reviews,
+      // Offers always come from the freshest data (admins can switch them off)
+      offers: detail.offers,
+    );
+  }
+
+  List<PgOffer> get _offers {
+    if (_fullPg != null) return _fullPg!.offers;
+    return widget.pg.offers;
+  }
+
+  Widget _buildOfferCard(PgOffer offer) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFFE8590C).withOpacity(0.16),
+            const Color(0xFFF59F00).withOpacity(0.08),
+          ],
+        ),
+        border: Border.all(color: const Color(0xFFF59F00).withOpacity(0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFE8590C), Color(0xFFF59F00)],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  offer.headline,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  offer.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (offer.description.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              offer.description,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.75),
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.schedule_rounded,
+                  size: 14, color: Colors.white.withOpacity(0.5)),
+              const SizedBox(width: 4),
+              Text(
+                offer.validityLabel,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.55),
+                  fontSize: 12,
+                ),
+              ),
+              const Spacer(),
+              if (offer.couponCode.isNotEmpty)
+                GestureDetector(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: offer.couponCode));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Code ${offer.couponCode} copied')),
+                    );
+                  },
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFF59F00)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          offer.couponCode,
+                          style: const TextStyle(
+                            color: Color(0xFFFFB84D),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.copy_rounded,
+                            size: 12, color: Color(0xFFFFB84D)),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (offer.terms.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'T&C: ${offer.terms}',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.4),
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -349,6 +483,20 @@ class _PgDetailModalState extends State<PgDetailModal> {
                               ),
                             ),
                             const SizedBox(height: 16),
+
+                            if (_offers.isNotEmpty) ...[
+                              const Text(
+                                'Offers',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              ..._offers.map(_buildOfferCard),
+                              const SizedBox(height: 10),
+                            ],
 
                             if (_amenities.isNotEmpty) ...[
                               const Text(

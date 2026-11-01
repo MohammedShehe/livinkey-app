@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart';
 import 'package:livinkey/models/auth_models.dart';
 
 import '../../services/api_service.dart';
+import '../../services/saved_credentials.dart';
 import '../../utils/constants.dart';
 import '../../utils/helpers.dart';
 import '../../widgets/common/snackbar_helper.dart';
@@ -313,6 +314,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
       if (!mounted) return;
 
       if (response['success'] == true) {
+        // Keep the "Remember me" copy in step with the new password
+        await SavedCredentials.updatePasswordIfSaved(
+          isTenant: _isTenantLogin,
+          email: _emailController.text.trim(),
+          newPassword: newPassword,
+        );
+        if (!mounted) return;
         SnackbarHelper.showSuccess(context, 'Password reset successful!');
 
         await Future.delayed(const Duration(milliseconds: 500));

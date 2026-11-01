@@ -206,6 +206,8 @@ class _NotificationScreenState extends State<NotificationScreen>
         break;
 
       case 'document_reminder':
+      case 'document_approved':
+      case 'document_rejected':
       case 'efrro_expiry':
       case 'document':
         Navigator.of(context).pushNamed('/tenant-documents');
@@ -235,6 +237,12 @@ class _NotificationScreenState extends State<NotificationScreen>
         return '✅';
       case 'document_reminder':
         return '📋';
+      case 'document_approved':
+        return '✅';
+      case 'document_rejected':
+        return '⚠️';
+      case 'pg_offer':
+        return '🎉';
       case 'efrro_expiry':
         return '🛂';
       case 'payment_reminder':

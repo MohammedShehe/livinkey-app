@@ -63,6 +63,63 @@ List<String> _parseImages(dynamic value) {
   return [];
 }
 
+/// An admin-managed offer on a PG. The API only returns offers that are live.
+class PgOffer {
+  final int id;
+  final String title;
+  final String description;
+  final String headline;
+  final String offerType;
+  final double? offerValue;
+  final String couponCode;
+  final String terms;
+  final String? validUntil;
+
+  const PgOffer({
+    required this.id,
+    required this.title,
+    this.description = '',
+    this.headline = 'OFFER',
+    this.offerType = 'custom',
+    this.offerValue,
+    this.couponCode = '',
+    this.terms = '',
+    this.validUntil,
+  });
+
+  factory PgOffer.fromJson(Map<String, dynamic> json) {
+    final rawValue = json['offer_value'];
+    return PgOffer(
+      id: _safeToInt(json['id']),
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      headline: (json['headline']?.toString().isNotEmpty ?? false)
+          ? json['headline'].toString()
+          : 'OFFER',
+      offerType: json['offer_type']?.toString() ?? 'custom',
+      offerValue: rawValue == null ? null : _safeToDouble(rawValue),
+      couponCode: json['coupon_code']?.toString() ?? '',
+      terms: json['terms']?.toString() ?? '',
+      validUntil: (json['valid_until']?.toString().isNotEmpty ?? false)
+          ? json['valid_until'].toString()
+          : null,
+    );
+  }
+
+  /// "Valid till 31 Dec 2026" or a generic label when there is no end date.
+  String get validityLabel {
+    final v = validUntil;
+    if (v == null) return 'Limited-time offer';
+    final d = DateTime.tryParse(v);
+    if (d == null) return 'Limited-time offer';
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return 'Valid till ${d.day} ${months[d.month - 1]} ${d.year}';
+  }
+}
+
 class PgModel {
   final int id;
   final String name;
@@ -82,6 +139,7 @@ class PgModel {
   final int occupancyPercentage;
   final List<FloorModel> floors;
   final List<ReviewModel> reviews;
+  final List<PgOffer> offers;
 
   PgModel({
     required this.id,
@@ -102,7 +160,11 @@ class PgModel {
     this.occupancyPercentage = 0,
     this.floors = const [],
     this.reviews = const [],
+    this.offers = const [],
   });
+
+  bool get hasOffer => offers.isNotEmpty;
+  PgOffer? get bestOffer => offers.isNotEmpty ? offers.first : null;
 
   /// Count of completely empty rooms (occupiedCount == 0).
   /// A room with even 1 tenant is NOT counted as available space.
@@ -142,6 +204,12 @@ class PgModel {
             .toList() ??
         [];
 
+    final List<PgOffer> offers = (json['offers'] as List?)
+            ?.whereType<Map>()
+            .map((o) => PgOffer.fromJson(Map<String, dynamic>.from(o)))
+            .toList() ??
+        [];
+
     // ============================================================
     // FIXED: Get cover image from images list if not provided
     // ============================================================
@@ -169,6 +237,7 @@ class PgModel {
       occupancyPercentage: _safeToInt(json['occupancy_percentage']),
       floors: floors,
       reviews: reviews,
+      offers: offers,
     );
   }
 }

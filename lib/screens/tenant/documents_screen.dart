@@ -250,10 +250,68 @@ class _DocumentsScreenState extends State<DocumentsScreen>
       _toggleSelection(index);
     } else {
       if (uploaded != null) {
-        _showDocumentPreview(uploaded);
+        if ((uploaded['review_status'] ?? '').toString() == 'rejected') {
+          _showRejectedDialog(doc, uploaded);
+        } else {
+          _showDocumentPreview(uploaded);
+        }
       } else {
         _showUploadDialog(doc);
       }
+    }
+  }
+
+  /// Tells the tenant why an admin rejected the document and lets them re-upload.
+  Future<void> _showRejectedDialog(
+    Map<String, dynamic> doc,
+    Map<String, dynamic> uploaded,
+  ) async {
+    final String note = (uploaded['review_note'] ?? '').toString().trim();
+    final String label = (doc['label'] ?? doc['key'] ?? 'Document').toString();
+    final bool? reupload = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141414),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            const Icon(Icons.error_outline_rounded, color: Colors.redAccent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '$label was rejected',
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          note.isEmpty
+              ? 'Please upload a clear, valid copy of this document.'
+              : 'Reason: $note',
+          style: TextStyle(color: Colors.white.withOpacity(0.75), height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('View old file'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kLivinkeyGreen,
+              foregroundColor: Colors.black,
+            ),
+            child: const Text('Upload again'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || reupload == null) return;
+    if (reupload) {
+      _showUploadDialog(doc);
+    } else {
+      _showDocumentPreview(uploaded);
     }
   }
 
@@ -1107,6 +1165,18 @@ class _DocumentsScreenState extends State<DocumentsScreen>
   ) {
     final label = doc['label'] ?? doc['key'] ?? 'Document';
     final icon = _getIconForType(doc['key']);
+    final String reviewStatus =
+        (uploadedDoc?['review_status'] ?? 'approved').toString();
+    final bool isRejected = hasDocument && reviewStatus == 'rejected';
+    final bool isPending = hasDocument && reviewStatus == 'pending';
+    final Color statusColor = isRejected
+        ? Colors.redAccent
+        : (isPending ? Colors.amber : kLivinkeyGreen);
+    final String statusLabel = !hasDocument
+        ? 'Missing'
+        : (isRejected
+            ? '✗ Rejected'
+            : (isPending ? '⏳ In review' : '✓ Approved'));
 
     return InkWell(
       onTap: () => _handleCardTap(index),
@@ -1117,13 +1187,13 @@ class _DocumentsScreenState extends State<DocumentsScreen>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              hasDocument ? kLivinkeyGreen.withOpacity(0.08) : Colors.white.withOpacity(0.04),
-              hasDocument ? kLivinkeyGreen.withOpacity(0.02) : Colors.white.withOpacity(0.01),
+              hasDocument ? statusColor.withOpacity(0.08) : Colors.white.withOpacity(0.04),
+              hasDocument ? statusColor.withOpacity(0.02) : Colors.white.withOpacity(0.01),
             ],
           ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: hasDocument ? kLivinkeyGreen.withOpacity(0.3) : Colors.white.withOpacity(0.08),
+            color: hasDocument ? statusColor.withOpacity(0.35) : Colors.white.withOpacity(0.08),
             width: hasDocument ? 1.5 : 1,
           ),
         ),
@@ -1162,13 +1232,13 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: hasDocument ? kLivinkeyGreen.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+                      color: hasDocument ? statusColor.withOpacity(0.2) : Colors.white.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      hasDocument ? '✓ Uploaded' : 'Missing',
+                      statusLabel,
                       style: TextStyle(
-                        color: hasDocument ? kLivinkeyGreen : Colors.white.withOpacity(0.3),
+                        color: hasDocument ? statusColor : Colors.white.withOpacity(0.3),
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
                       ),

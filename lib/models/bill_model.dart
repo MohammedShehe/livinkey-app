@@ -8,6 +8,7 @@ class BillModel {
   final DateTime? periodTill;
   final double rentAmount;
   final double electricityAmount;
+  final double? electricityUnits;
   final double maintenanceAmount;
   final double otherCharges;
   final String? otherChargesNote;
@@ -49,6 +50,7 @@ class BillModel {
     this.periodTill,
     required this.rentAmount,
     required this.electricityAmount,
+    this.electricityUnits,
     required this.maintenanceAmount,
     required this.otherCharges,
     this.otherChargesNote,
@@ -129,6 +131,9 @@ class BillModel {
       periodTill: _toDate(json['period_till']),
       rentAmount: _toDouble(json['rent_amount']),
       electricityAmount: _toDouble(json['electricity_amount']),
+      electricityUnits: json['units_consumed'] == null
+          ? null
+          : _toDouble(json['units_consumed']),
       maintenanceAmount: _toDouble(json['maintenance_amount']),
       otherCharges: _toDouble(json['other_charges']),
       otherChargesNote: json['other_charges_note']?.toString(),

@@ -310,7 +310,7 @@ class PushNotificationService {
     final String type = (data['type'] ?? data['action'] ?? '').toString().toLowerCase();
 
     // Wait until navigator is ready
-    void tryNavigate() {
+    Future<void> tryNavigate() async {
       final nav = navigatorKey.currentState;
       if (nav == null) {
         // Retry a few times
@@ -318,12 +318,21 @@ class PushNotificationService {
         return;
       }
 
+      // Guests have no tenant screens: opening the app already lands them on
+      // their home, where new notifications are listed.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if ((prefs.getString('lk_role') ?? 'tenant') == 'guest') return;
+      } catch (_) {}
+
       switch (type) {
         case 'bill_created':
         case 'bill_paid':
         case 'bill_partially_paid':
         case 'bill_fine_applied':
         case 'payment_reminder':
+        case 'payment_proof_verified':
+        case 'payment_proof_rejected':
         case 'payment':
           nav.pushNamed('/tenant-payments');
           break;
@@ -337,6 +346,8 @@ class PushNotificationService {
           break;
 
         case 'document_reminder':
+        case 'document_approved':
+        case 'document_rejected':
         case 'efrro_expiry':
         case 'document':
           nav.pushNamed('/tenant-documents');
