@@ -9,6 +9,16 @@ class BillModel {
   final double rentAmount;
   final double electricityAmount;
   final double? electricityUnits;
+
+  /// Meter readings (set when the bill was made from meter readings).
+  /// A two-meter PG has a main meter and an inverter meter.
+  final bool dualMeter;
+  final double? previousReading;
+  final double? currentReading;
+  final double? mainUnits;
+  final double? inverterPreviousReading;
+  final double? inverterCurrentReading;
+  final double? inverterUnits;
   final double maintenanceAmount;
   final double otherCharges;
   final String? otherChargesNote;
@@ -51,6 +61,13 @@ class BillModel {
     required this.rentAmount,
     required this.electricityAmount,
     this.electricityUnits,
+    this.dualMeter = false,
+    this.previousReading,
+    this.currentReading,
+    this.mainUnits,
+    this.inverterPreviousReading,
+    this.inverterCurrentReading,
+    this.inverterUnits,
     required this.maintenanceAmount,
     required this.otherCharges,
     this.otherChargesNote,
@@ -134,6 +151,25 @@ class BillModel {
       electricityUnits: json['units_consumed'] == null
           ? null
           : _toDouble(json['units_consumed']),
+      dualMeter: json['meter_mode']?.toString() == 'dual' &&
+          json['inverter_current_reading'] != null,
+      previousReading: json['previous_reading'] == null
+          ? null
+          : _toDouble(json['previous_reading']),
+      currentReading: json['current_reading'] == null
+          ? null
+          : _toDouble(json['current_reading']),
+      mainUnits:
+          json['main_units'] == null ? null : _toDouble(json['main_units']),
+      inverterPreviousReading: json['inverter_previous_reading'] == null
+          ? null
+          : _toDouble(json['inverter_previous_reading']),
+      inverterCurrentReading: json['inverter_current_reading'] == null
+          ? null
+          : _toDouble(json['inverter_current_reading']),
+      inverterUnits: json['inverter_units'] == null
+          ? null
+          : _toDouble(json['inverter_units']),
       maintenanceAmount: _toDouble(json['maintenance_amount']),
       otherCharges: _toDouble(json['other_charges']),
       otherChargesNote: json['other_charges_note']?.toString(),

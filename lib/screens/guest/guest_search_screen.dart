@@ -112,23 +112,13 @@ class _GuestSearchScreenState extends State<GuestSearchScreen>
         if (response['success'] == true && response['data'] != null) {
           final detail = PgModel.fromJson(response['data']);
           if (detail.floors.isNotEmpty && mounted) {
-            _allPgs[index] = PgModel(
-              id: pg.id,
-              name: pg.name,
-              location: pg.location,
-              rating: pg.rating,
+            _allPgs[index] = pg.copyWith(
               totalRooms: pg.totalRooms > 0 ? pg.totalRooms : detail.totalRooms,
               totalCapacity: pg.totalCapacity > 0 ? pg.totalCapacity : detail.totalCapacity,
               totalOccupied: pg.totalOccupied > 0 ? pg.totalOccupied : detail.totalOccupied,
-              rent: pg.rent,
-              securityFee: pg.securityFee,
-              numberOfFloors: pg.numberOfFloors,
-              isActive: pg.isActive,
               coverImage: pg.coverImage ?? detail.coverImage,
               images: pg.images.isNotEmpty ? pg.images : detail.images,
               amenityNames: pg.amenityNames.isNotEmpty ? pg.amenityNames : detail.amenityNames,
-              statusText: pg.statusText,
-              occupancyPercentage: pg.occupancyPercentage,
               floors: detail.floors,
               reviews: pg.reviews.isNotEmpty ? pg.reviews : detail.reviews,
             );

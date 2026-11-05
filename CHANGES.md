@@ -7,7 +7,7 @@
    - Razorpay → `https://api.livinkey.com/api/payments/webhook/razorpay` (events: payment.captured, order.paid, payment.failed; use the webhook secret above)
    - Cashfree → `https://api.livinkey.com/api/payments/webhook/cashfree`
    - Twilio → `https://api.livinkey.com/api/webhooks/twilio/whatsapp` and `/status` (Twilio must call exactly the PUBLIC_API_URL host)
-4. **Mobile app**: run `flutter pub get` (new dependency `flutter_secure_storage`), then `flutter build appbundle`. Version bumped to 1.1.0+7.
+4. **Mobile app**: run `flutter pub get` (new dependency `flutter_secure_storage`), then `flutter build appbundle`. Version bumped to 1.0.0+7.
 5. Deploy backend + admin + website together (admin/app use the new download-token and error-code responses).
 
 ## Backend
@@ -40,3 +40,15 @@
 - Backend was smoke-tested (auth, tokens, webhook rejection, CORS) but not against your live DB or gateways.
 - I made targeted UX improvements, not a ground-up visual redesign of all 27k lines of app UI.
 - Login/OTP lockouts are in-memory (fine for one server instance; use Redis if you scale out).
+
+---
+
+## v3 update — offers, room counts, bills
+
+- **Offers:** PG cards and the PG detail sheet show the old rent crossed out with the new offer rent, and a live
+  "Ends in 7h 12m" counter (turns red in the last hour; the offer disappears when it hits zero).
+  New widgets in `lib/widgets/guest/offer_widgets.dart`.
+- **Bug fix:** the list "enrichment" in the home/search screens rebuilt each PG and silently dropped its offers.
+  `PgModel.copyWith` is used now, so offers (and manual room counts) survive.
+- **Room counts:** `🛏 rooms / 🏠 vacant` use the server's `vacant_rooms` (live data, or the numbers an admin set manually).
+- **Bills:** the tenant bill breakdown shows meter readings; for two-meter PGs it shows Main meter, Inverter meter and total units.
