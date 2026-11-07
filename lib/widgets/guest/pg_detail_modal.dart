@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../utils/constants.dart';
 import '../../models/pg_model.dart';
+import 'offer_widgets.dart';
 import '../../services/api_service.dart';
 import '../../widgets/common/snackbar_helper.dart';
 
@@ -87,12 +88,16 @@ class _PgDetailModalState extends State<PgDetailModal> {
       reviews: detail.reviews.isNotEmpty ? detail.reviews : listVersion.reviews,
       // Offers always come from the freshest data (admins can switch them off)
       offers: detail.offers,
+      // Room counts: the server value wins (it already reflects manual counts)
+      vacantRooms: detail.vacantRooms ?? listVersion.vacantRooms,
+      roomsManual: detail.roomsManual || listVersion.roomsManual,
     );
   }
 
+  // Only offers that are still running (an offer disappears when its counter hits zero)
   List<PgOffer> get _offers {
-    if (_fullPg != null) return _fullPg!.offers;
-    return widget.pg.offers;
+    final all = _fullPg != null ? _fullPg!.offers : widget.pg.offers;
+    return all.where((o) => !o.isExpired).toList();
   }
 
   Widget _buildOfferCard(PgOffer offer) {
@@ -145,6 +150,41 @@ class _PgDetailModalState extends State<PgDetailModal> {
               ),
             ],
           ),
+          if (offer.hasPriceCut &&
+              offer.originalPrice != null &&
+              offer.offerPrice != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                OfferPrice(
+                  original: offer.originalPrice!,
+                  offer: offer.offerPrice!,
+                  fontSize: 20,
+                ),
+                if (offer.discountAmount != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    'You save ₹${offer.discountAmount!.toStringAsFixed(0)}',
+                    style: TextStyle(
+                      color: kLivinkeyGreen.withOpacity(0.85),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+          if (offer.endsAt != null) ...[
+            const SizedBox(height: 8),
+            OfferCountdown(
+              offer: offer,
+              fontSize: 12,
+              onExpired: () {
+                if (mounted) setState(() {});
+              },
+            ),
+          ],
           if (offer.description.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
@@ -252,7 +292,8 @@ class _PgDetailModalState extends State<PgDetailModal> {
         'Hello Livinkey! I would like to book a PG.\n'
         'PG Name: ${_pg.name}\n'
         'Location: ${_pg.location}\n'
-        'Rent: ₹${_pg.rent}/month\n'
+        'Rent: ₹${(_pg.offerRent ?? _pg.rent).toStringAsFixed(0)}/month'
+        '${_pg.offerRent != null ? ' (offer price, regular ₹${_pg.rent.toStringAsFixed(0)})' : ''}\n'
         'Please provide more details.';
 
     final String url = 'https://wa.me/919878383497?text=${Uri.encodeComponent(message)}';
@@ -429,14 +470,23 @@ class _PgDetailModalState extends State<PgDetailModal> {
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
-                                  Text(
-                                    '₹${_pg.rent.toStringAsFixed(0)}',
-                                    style: const TextStyle(
-                                      color: kLivinkeyGreen,
+                                  // Old price crossed out + new price when an offer applies
+                                  if (_pg.offerRent != null)
+                                    OfferPrice(
+                                      original: _pg.rent,
+                                      offer: _pg.offerRent!,
                                       fontSize: 22,
-                                      fontWeight: FontWeight.w800,
+                                      suffix: '',
+                                    )
+                                  else
+                                    Text(
+                                      '₹${_pg.rent.toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                        color: kLivinkeyGreen,
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w800,
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -456,8 +506,8 @@ class _PgDetailModalState extends State<PgDetailModal> {
                                 _buildRoomInfo(
                                   icon: Icons.person_outline_rounded,
                                   label: 'Available',
-                                  value: (_pg.emptyRoomsCount ?? 0).toString(),
-                                  color: (_pg.emptyRoomsCount ?? 0) > 0
+                                  value: _pg.displayVacantRooms.toString(),
+                                  color: _pg.displayVacantRooms > 0
                                       ? kLivinkeyGreen
                                       : Colors.red,
                                 ),

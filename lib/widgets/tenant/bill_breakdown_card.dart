@@ -14,6 +14,23 @@ class BillBreakdownCard extends StatelessWidget {
   static String _inr(double v) =>
       '₹${NumberFormat('#,##,##0.00', 'en_IN').format(v)}';
 
+  static String _n(double v) =>
+      NumberFormat('#,##,##0.##', 'en_IN').format(v);
+
+  /// "Main meter: 1,000 → 1,100 (100 units)" – one line per meter.
+  static String? _meterNote(BillModel b) {
+    final prev = b.previousReading, cur = b.currentReading;
+    if (prev == null || cur == null) return null;
+    if (!b.dualMeter) {
+      return 'Meter: ${_n(prev)} → ${_n(cur)} (${_n(b.electricityUnits ?? (cur - prev))} units)';
+    }
+    final ip = b.inverterPreviousReading ?? 0;
+    final ic = b.inverterCurrentReading ?? 0;
+    return 'Main meter: ${_n(prev)} → ${_n(cur)} (${_n(b.mainUnits ?? (cur - prev))} units)\n'
+        'Inverter meter: ${_n(ip)} → ${_n(ic)} (${_n(b.inverterUnits ?? (ic - ip))} units)\n'
+        'Total used: ${_n(b.electricityUnits ?? ((cur - prev) + (ic - ip)))} units';
+  }
+
   @override
   Widget build(BuildContext context) {
     final billed = bill.totalAmount + bill.fineAmount;
@@ -30,6 +47,7 @@ class BillBreakdownCard extends StatelessWidget {
               : 'Electricity',
           _inr(bill.electricityAmount),
           Icons.bolt_rounded,
+          note: _meterNote(bill),
         ),
       if (bill.maintenanceAmount > 0)
         _Row('Maintenance', _inr(bill.maintenanceAmount), Icons.build_rounded),

@@ -181,7 +181,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
       if (!mounted) return;
 
       if (response['success'] == true) {
-        SnackbarHelper.showSuccess(context, 'OTP sent to $email');
+        SnackbarHelper.showSuccess(context, 'OTP sent to your registered WhatsApp, SMS or email');
         _nextStep();
       } else {
         SnackbarHelper.showError(context, response['message'] ?? 'Failed to send OTP');
@@ -355,9 +355,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   String _getStepSubtitle() {
     switch (_currentStep) {
       case 0:
-        return 'Enter your registered email to receive OTP';
+        return 'Enter your registered email to receive an OTP on WhatsApp, SMS or email';
       case 1:
-        return 'Enter the OTP sent to your email';
+        return 'Enter the OTP sent to your WhatsApp, SMS or email';
       case 2:
         return 'Create a strong new password';
       default:

@@ -75,6 +75,17 @@ class PgOffer {
   final String terms;
   final String? validUntil;
 
+  /// Price strike-through: show [originalPrice] crossed out and [offerPrice] as the new price.
+  final bool hasPriceCut;
+  final double? originalPrice;
+  final double? offerPrice;
+  final double? discountAmount;
+
+  /// When the offer ends, on this device's clock. Worked out from the server's
+  /// "seconds left" at the moment the data arrived, so a wrong phone clock
+  /// cannot make an offer look live (or expired) by mistake. null = no end time.
+  final DateTime? endsAt;
+
   const PgOffer({
     required this.id,
     required this.title,
@@ -85,10 +96,19 @@ class PgOffer {
     this.couponCode = '',
     this.terms = '',
     this.validUntil,
+    this.hasPriceCut = false,
+    this.originalPrice,
+    this.offerPrice,
+    this.discountAmount,
+    this.endsAt,
   });
 
   factory PgOffer.fromJson(Map<String, dynamic> json) {
     final rawValue = json['offer_value'];
+    final secondsLeft = json['seconds_left'];
+    final hasCut = json['has_price_cut'] == true ||
+        json['has_price_cut'] == 1 ||
+        (json['offer_price'] != null && json['original_price'] != null);
     return PgOffer(
       id: _safeToInt(json['id']),
       title: json['title']?.toString() ?? '',
@@ -103,7 +123,37 @@ class PgOffer {
       validUntil: (json['valid_until']?.toString().isNotEmpty ?? false)
           ? json['valid_until'].toString()
           : null,
+      hasPriceCut: hasCut && json['offer_price'] != null,
+      originalPrice: json['original_price'] == null
+          ? null
+          : _safeToDouble(json['original_price']),
+      offerPrice:
+          json['offer_price'] == null ? null : _safeToDouble(json['offer_price']),
+      discountAmount: json['discount_amount'] == null
+          ? null
+          : _safeToDouble(json['discount_amount']),
+      endsAt: secondsLeft == null
+          ? null
+          : DateTime.now().add(Duration(seconds: _safeToInt(secondsLeft))),
     );
+  }
+
+  bool get isExpired => endsAt != null && !endsAt!.isAfter(DateTime.now());
+
+  /// Time left, or null when the offer has no end time.
+  Duration? get timeLeft {
+    if (endsAt == null) return null;
+    final d = endsAt!.difference(DateTime.now());
+    return d.isNegative ? Duration.zero : d;
+  }
+
+  /// "2d 5h", "7h 12m" or "42m 10s" – the live counter text (without "left").
+  String get countdownText {
+    final d = timeLeft;
+    if (d == null) return '';
+    if (d.inDays >= 1) return '${d.inDays}d ${d.inHours % 24}h';
+    if (d.inHours >= 1) return '${d.inHours}h ${d.inMinutes % 60}m';
+    return '${d.inMinutes}m ${(d.inSeconds % 60).toString().padLeft(2, '0')}s';
   }
 
   /// "Valid till 31 Dec 2026" or a generic label when there is no end date.
@@ -141,6 +191,11 @@ class PgModel {
   final List<ReviewModel> reviews;
   final List<PgOffer> offers;
 
+  /// Vacant (completely empty) rooms as decided by the server: the live number,
+  /// or the number an admin typed in when manual room counts are switched on.
+  final int? vacantRooms;
+  final bool roomsManual;
+
   PgModel({
     required this.id,
     required this.name,
@@ -161,10 +216,62 @@ class PgModel {
     this.floors = const [],
     this.reviews = const [],
     this.offers = const [],
+    this.vacantRooms,
+    this.roomsManual = false,
   });
 
-  bool get hasOffer => offers.isNotEmpty;
-  PgOffer? get bestOffer => offers.isNotEmpty ? offers.first : null;
+  /// Offers that have not run out. The server already hides ended offers; this
+  /// also removes one the moment its countdown reaches zero while the screen is open.
+  List<PgOffer> get liveOffers => offers.where((o) => !o.isExpired).toList();
+  bool get hasOffer => liveOffers.isNotEmpty;
+  PgOffer? get bestOffer => liveOffers.isNotEmpty ? liveOffers.first : null;
+
+  /// Rent to show as the new price when the best offer cuts the price (else null).
+  double? get offerRent {
+    final o = bestOffer;
+    return (o != null && o.hasPriceCut) ? o.offerPrice : null;
+  }
+
+  /// Vacant rooms to show visitors: manual / server value first, else counted from floors.
+  int get displayVacantRooms => vacantRooms ?? emptyRoomsCount ?? 0;
+
+  PgModel copyWith({
+    int? totalRooms,
+    int? totalCapacity,
+    int? totalOccupied,
+    String? coverImage,
+    List<String>? images,
+    List<String>? amenityNames,
+    List<FloorModel>? floors,
+    List<ReviewModel>? reviews,
+    List<PgOffer>? offers,
+    int? vacantRooms,
+    bool? roomsManual,
+  }) {
+    return PgModel(
+      id: id,
+      name: name,
+      location: location,
+      rating: rating,
+      totalRooms: totalRooms ?? this.totalRooms,
+      totalCapacity: totalCapacity ?? this.totalCapacity,
+      totalOccupied: totalOccupied ?? this.totalOccupied,
+      rent: rent,
+      securityFee: securityFee,
+      numberOfFloors: numberOfFloors,
+      isActive: isActive,
+      coverImage: coverImage ?? this.coverImage,
+      images: images ?? this.images,
+      amenityNames: amenityNames ?? this.amenityNames,
+      statusText: statusText,
+      occupancyPercentage: occupancyPercentage,
+      floors: floors ?? this.floors,
+      reviews: reviews ?? this.reviews,
+      offers: offers ?? this.offers,
+      vacantRooms: vacantRooms ?? this.vacantRooms,
+      roomsManual: roomsManual ?? this.roomsManual,
+    );
+  }
 
   /// Count of completely empty rooms (occupiedCount == 0).
   /// A room with even 1 tenant is NOT counted as available space.
@@ -238,6 +345,9 @@ class PgModel {
       floors: floors,
       reviews: reviews,
       offers: offers,
+      vacantRooms:
+          json['vacant_rooms'] == null ? null : _safeToInt(json['vacant_rooms']),
+      roomsManual: json['rooms_manual'] == true || json['rooms_manual'] == 1,
     );
   }
 }

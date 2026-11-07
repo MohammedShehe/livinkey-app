@@ -2,8 +2,9 @@
 import 'package:flutter/material.dart';
 import '../../utils/constants.dart';
 import '../../models/pg_model.dart';
+import 'offer_widgets.dart';
 
-class PgCard extends StatelessWidget {
+class PgCard extends StatefulWidget {
   final PgModel pg;
   final VoidCallback onTap;
 
@@ -14,13 +15,22 @@ class PgCard extends StatelessWidget {
   });
 
   @override
+  State<PgCard> createState() => _PgCardState();
+}
+
+class _PgCardState extends State<PgCard> {
+  PgModel get pg => widget.pg;
+  VoidCallback get onTap => widget.onTap;
+
+  @override
   Widget build(BuildContext context) {
     // FIXED: Use statusText instead of status
     final String statusText = pg.statusText;
     final bool isVacant = statusText == 'Vacant';
     // Count only COMPLETELY empty rooms (not remaining bed spaces)
     // If floors data is missing, fall back to 0 so we never show partial spaces as available
-    final int availableRooms = pg.emptyRoomsCount ?? 0;
+    // (or the number an admin set manually for this PG)
+    final int availableRooms = pg.displayVacantRooms;
 
     return GestureDetector(
       onTap: onTap,
@@ -131,8 +141,8 @@ class PgCard extends StatelessWidget {
                           const SizedBox(width: 4),
                           Text(
                             pg.bestOffer!.headline +
-                                (pg.offers.length > 1
-                                    ? '  +${pg.offers.length - 1}'
+                                (pg.liveOffers.length > 1
+                                    ? '  +${pg.liveOffers.length - 1}'
                                     : ''),
                             style: const TextStyle(
                               color: Colors.white,
@@ -231,6 +241,17 @@ class PgCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                    // Live counter, e.g. "Ends in 7h 12m"
+                    if (pg.bestOffer!.endsAt != null) ...[
+                      const SizedBox(height: 4),
+                      OfferCountdown(
+                        offer: pg.bestOffer!,
+                        // When it hits zero the card redraws without the offer
+                        onExpired: () {
+                          if (mounted) setState(() {});
+                        },
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 6),
                   Row(
@@ -281,13 +302,22 @@ class PgCard extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '₹${pg.rent.toStringAsFixed(0)}/mo',
-                        style: const TextStyle(
-                          color: kLivinkeyGreen,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      // Offer price: old price crossed out, new price shown
+                      Flexible(
+                        child: pg.offerRent != null
+                            ? OfferPrice(
+                                original: pg.rent,
+                                offer: pg.offerRent!,
+                                fontSize: 14,
+                              )
+                            : Text(
+                                '₹${pg.rent.toStringAsFixed(0)}/mo',
+                                style: const TextStyle(
+                                  color: kLivinkeyGreen,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
